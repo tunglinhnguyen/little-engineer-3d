@@ -37,9 +37,7 @@ app.innerHTML = `
     <p id="missionDescription"></p><div class="lesson" id="missionLesson"></div>
     <div class="mission-actions"><button id="prevMission">‹</button><span id="missionCount"></span><button id="nextMission">›</button></div>
   </aside>
-  <aside class="inspector panel" id="inspector">
-    <div class="empty">Chạm một mô-đun để xem thông tin.</div>
-  </aside>
+  <aside class="inspector panel hidden-by-user" id="inspector"></aside>
   <nav class="camera-bar panel">
     <button data-camera="iso" class="active">◩ Chéo</button>
     <button data-camera="top">▦ Trên</button>
@@ -279,12 +277,12 @@ positionCoach();
 
 function renderInspector(id: string | null) {
   const el = document.querySelector<HTMLDivElement>('#inspector')!;
-  el.classList.remove('hidden-by-user');
   if (!id) {
-    el.classList.add('compact');
-    el.innerHTML = '<div class="empty">Chạm một mô-đun để xem thông tin.</div>';
+    el.classList.add('hidden-by-user');
+    el.innerHTML = '';
     return;
   }
+  el.classList.remove('hidden-by-user');
 
   const m = graph.modules.get(id);
   if (!m) return;
@@ -370,8 +368,8 @@ function renderInspector(id: string | null) {
     '</div>';
 
   document.querySelector<HTMLButtonElement>('#closeInspector')!.onclick = () => {
+    workbench.clearSelection();
     el.classList.add('hidden-by-user');
-    workbench.selectedId = null;
   };
   document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected();
   document.querySelector<HTMLButtonElement>('#focusPart')!.onclick = () => workbench.focusSelected();
