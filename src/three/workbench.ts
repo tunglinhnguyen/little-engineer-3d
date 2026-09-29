@@ -187,7 +187,7 @@ export class Workbench {
     this.rpm = rpm;
     this.active = active;
     this.fluid = fluid;
-    this.connectionLayer.visible = !running;
+    if (this.connectionLayer) this.connectionLayer.visible = !running;
     if (!running) this.vehicleTravel.clear();
   }
 
@@ -261,6 +261,7 @@ export class Workbench {
   }
 
   private refreshConnectionVisuals() {
+    if (!this.connectionLayer) return;
     while (this.connectionLayer.children.length) {
       const child = this.connectionLayer.children[0];
       this.connectionLayer.remove(child);
