@@ -328,6 +328,59 @@ export class Workbench {
         });
       }
 
+      const machineRunning = this.running && this.rpm.has(id);
+      if (m.type === 'crane' && machineRunning) {
+        o.traverse(child => {
+          if (child.userData.craneBoom) child.rotation.z = Math.sin(now * .0011) * .16;
+          if (child.userData.craneCable) child.scale.y = 1 + (Math.sin(now * .0015) + 1) * .18;
+          if (child.userData.craneHook) child.position.y = -1.02 - (Math.sin(now * .0015) + 1) * .12;
+        });
+      }
+      if (m.type === 'excavator' && machineRunning) {
+        o.traverse(child => {
+          if (child.userData.excavatorArm) child.rotation.z = -.18 + Math.sin(now * .0012) * .22;
+          if (child.userData.excavatorForearm) child.rotation.z = -.65 + Math.sin(now * .0016 + 1.1) * .22;
+          if (child.userData.excavatorBucket) child.rotation.z = -.25 + Math.sin(now * .0018 + 2) * .3;
+        });
+      }
+      if (m.type === 'bulldozer') {
+        o.traverse(child => {
+          if (child.userData.bulldozerBlade) child.position.y = -.02 + (machineRunning ? Math.sin(now * .002) * .08 : 0);
+        });
+      }
+      if (m.type === 'firetruck') {
+        o.traverse(child => {
+          if (!child.userData.sirenLight || !(child as THREE.Mesh).isMesh) return;
+          const material = (child as THREE.Mesh).material;
+          if (material instanceof THREE.MeshStandardMaterial) {
+            material.emissive.copy(material.color);
+            material.emissiveIntensity = machineRunning ? .4 + (Math.sin(now * .018 + child.userData.sirenPhase) + 1) * 1.4 : 0;
+          }
+        });
+      }
+      if (m.type === 'boat') {
+        o.traverse(child => {
+          if (child.userData.boatWake) child.visible = machineRunning;
+        });
+      }
+      if (m.type === 'waterfall') {
+        o.traverse(child => {
+          if (!child.userData.waterfall) return;
+          const scale = .92 + (Math.sin(now * .007) + 1) * .05;
+          child.scale.y = scale;
+          child.position.y = .2 - (1 - scale) * .4;
+        });
+      }
+      if (m.type === 'water-tile' || m.type === 'river-tile' || m.type === 'sea-tile') {
+        o.traverse(child => {
+          if (!child.userData.waterSurface) return;
+          const base = child.userData.waterBaseY ?? child.position.y;
+          child.userData.waterBaseY = base;
+          child.position.y = base + Math.sin(now * .0025 + id.length) * .025;
+          child.rotation.z = Math.sin(now * .0014 + id.length) * .008;
+        });
+      }
+
       if (m.type === 'cloud') {
         const drift = Math.sin(now * .00035 + id.length) * .12;
         o.traverse(child => {
@@ -375,19 +428,44 @@ export class Workbench {
       if (model) object.position.set(...model.position);
     }
     if (this.running) {
-      const hasRoad = [...this.graph.modules.values()].some(m => m.type === 'road-straight' || m.type === 'road-curve' || m.type === 'bridge');
-      const hasRail = [...this.graph.modules.values()].some(m => m.type === 'rail-straight' || m.type === 'rail-curve' || m.type === 'rail-crossing');
+      const modules = [...this.graph.modules.values()];
+      const hasRoad = modules.some(m => m.type === 'road-straight' || m.type === 'road-curve' || m.type === 'bridge');
+      const hasRail = modules.some(m => m.type === 'rail-straight' || m.type === 'rail-curve' || m.type === 'rail-crossing');
+      const hasWater = modules.some(m => m.type === 'water-tile' || m.type === 'river-tile' || m.type === 'sea-tile');
+      const hasRunway = modules.some(m => m.type === 'runway');
+      const hasHelipad = modules.some(m => m.type === 'helipad');
       const moved = new Set<string>();
 
       for (const [vehicleId, speed] of this.rpm) {
         const vehicle = this.graph.modules.get(vehicleId);
         if (!vehicle || MODULES[vehicle.type].behavior.kind !== 'vehicle') continue;
+
+        const needsRoad = vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base' || vehicle.type === 'firetruck';
         if ((vehicle.type === 'train-engine' && !hasRail) ||
-            ((vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base') && !hasRoad)) continue;
+            (needsRoad && !hasRoad) ||
+            (vehicle.type === 'boat' && !hasWater) ||
+            (vehicle.type === 'airplane' && !hasRunway) ||
+            (vehicle.type === 'helicopter' && !hasHelipad)) continue;
 
         const component = this.connectedComponent(vehicleId);
         const travelSpeed = MODULES[vehicle.type].behavior.vehicleSpeed ?? 1;
-        const distance = Math.sin(now * .00075 * travelSpeed * Math.max(.55, Math.abs(speed) / 90)) * 1.35;
+        const phase = now * .00075 * travelSpeed * Math.max(.55, Math.abs(speed) / 90);
+        let distance = Math.sin(phase) * 1.35;
+        let dy = 0;
+
+        if (vehicle.type === 'airplane') {
+          distance = Math.sin(phase) * 2.4;
+          dy = Math.max(0, Math.sin(phase - .45)) * 1.45;
+        } else if (vehicle.type === 'helicopter') {
+          distance = Math.sin(phase * .65) * .9;
+          dy = .72 + Math.sin(phase * 1.8) * .12;
+        } else if (vehicle.type === 'boat') {
+          distance = Math.sin(phase) * 1.7;
+          dy = Math.sin(phase * 3) * .045;
+        } else if (vehicle.type === 'crane' || vehicle.type === 'excavator' || vehicle.type === 'bulldozer') {
+          distance = Math.sin(phase * .55) * .55;
+        }
+
         const dx = Math.cos(vehicle.rotationY) * distance;
         const dz = -Math.sin(vehicle.rotationY) * distance;
 
@@ -396,7 +474,7 @@ export class Workbench {
           const model = this.graph.modules.get(partId);
           const part = this.objects.get(partId);
           if (!model || !part) continue;
-          part.position.set(model.position[0] + dx, model.position[1], model.position[2] + dz);
+          part.position.set(model.position[0] + dx, model.position[1] + dy, model.position[2] + dz);
           moved.add(partId);
         }
       }
