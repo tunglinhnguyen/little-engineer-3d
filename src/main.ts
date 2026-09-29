@@ -92,7 +92,7 @@ function addModule(type: ModuleType) {
   };
   workbench.addInstance(instance);
   showToast(`➕ Đã đặt ${MODULES[type].name} vào chỗ trống`);
-  speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description}`);
+  speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description} ${MODULES[type].science}`);
 }
 
 const parts = document.querySelector<HTMLDivElement>('#parts')!;
