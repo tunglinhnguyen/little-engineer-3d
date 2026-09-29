@@ -143,21 +143,39 @@ function saveQuietly() { localStorage.setItem('le3d-project', JSON.stringify(gra
 function findFreePosition(type: ModuleType): [number, number, number] {
   const def = MODULES[type];
   const radius = Math.max(def.size[0], def.size[2]) * .5 + .22;
-  const xs = [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8, -6.4, 6.4];
-  const zs = [2.8, 1.35, -.1, -1.55, -3, 4.25, -4.45];
-  for (const z of zs) {
-    for (const x of xs) {
-      const free = [...graph.modules.values()].every(existing => {
-        const other = MODULES[existing.type];
-        const otherRadius = Math.max(other.size[0], other.size[2]) * .5 + .22;
-        const dx = x - existing.position[0], dz = z - existing.position[2];
-        return Math.hypot(dx, dz) >= radius + otherRadius;
-      });
-      if (free) return [x, .65, z];
+  const selected = workbench?.selectedId ? graph.modules.get(workbench.selectedId) : undefined;
+  const originX = selected?.position[0] ?? 0;
+  const originZ = selected?.position[2] ?? 0;
+  const step = 1.7;
+
+  const candidates: [number, number][] = [];
+  for (let ring = 0; ring <= 12; ring++) {
+    for (let gx = -ring; gx <= ring; gx++) {
+      for (let gz = -ring; gz <= ring; gz++) {
+        if (ring > 0 && Math.max(Math.abs(gx), Math.abs(gz)) !== ring) continue;
+        const x = Math.round((originX + gx * step) * 4) / 4;
+        const z = Math.round((originZ + gz * step) * 4) / 4;
+        if (Math.abs(x) > 27 || Math.abs(z) > 19) continue;
+        candidates.push([x, z]);
+      }
     }
   }
+
+  for (const [x, z] of candidates) {
+    const free = [...graph.modules.values()].every(existing => {
+      const other = MODULES[existing.type];
+      const otherRadius = Math.max(other.size[0], other.size[2]) * .5 + .22;
+      return Math.hypot(x - existing.position[0], z - existing.position[2]) >= radius + otherRadius;
+    });
+    if (free) return [x, .65, z];
+  }
+
   const n = graph.modules.size;
-  return [((n % 7) - 3) * 1.65, .65, -5.8 - Math.floor(n / 7) * 1.5];
+  return [
+    Math.max(-27, Math.min(27, originX + ((n % 9) - 4) * 1.8)),
+    .65,
+    Math.max(-19, Math.min(19, originZ - 6 - Math.floor(n / 9) * 1.6)),
+  ];
 }
 
 function contextualSpawnPosition(type: ModuleType): [number, number, number] | null {
