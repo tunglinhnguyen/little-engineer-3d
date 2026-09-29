@@ -15,7 +15,7 @@ export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, sta
     }
   }
   const switchesOn = graph.findPathByTypes(required, path => path.every(m => m.type !== 'switch' || m.switchOn !== false));
-  if (!switchesOn) return { status: 'switch-off', message: 'Công tắc trong mạch nhiệm vụ đang tắt. Chọn công tắc rồi bấm Bật công tắc.' };
+  if (!switchesOn) return { status: 'switch-off', message: 'Công tắc trong mạch đang tắt. Chạm 2 lần trực tiếp vào công tắc để bật, hoặc dùng nút Bật trong bảng thông tin.' };
   const activePath = graph.findPathByTypes(required, path => path.every(m => state.active.has(m.id)));
   if (!activePath) return { status: 'inactive', message: 'Chuỗi đã nối nhưng đầu ra chưa hoạt động. Kiểm tra nguồn điện và các cổng nối.' };
   return running
@@ -48,8 +48,36 @@ export const MISSIONS: Mission[] = [
   {
     id: 'gear', title: 'Khám phá hộp số', emoji: '⚙️',
     description: 'Ráp Pin → Công tắc → Mô tơ → Bánh răng nhỏ → Bánh răng lớn → Bánh xe.',
-    lesson: 'Bánh răng thay đổi tốc độ quay và lợi thế mô-men.',
+    lesson: 'Bánh 12 răng truyền sang bánh 24 răng làm bánh lớn quay ngược chiều và bằng nửa tốc độ.',
     requiredPath: ['battery', 'switch', 'motor', 'gear-small', 'gear-large', 'wheel'],
-    success: 'Tuyệt! Chuyển động đã truyền qua bộ bánh răng tới bánh xe.',
+    success: 'Tuyệt! Bánh răng lớn đang quay ngược chiều và chậm hơn bánh nhỏ đúng theo tỉ số răng.',
+  },
+  {
+    id: 'solar-led', title: 'Đèn năng lượng mặt trời', emoji: '☀️',
+    description: 'Ráp Pin mặt trời → Công tắc → Đèn LED.',
+    lesson: 'Ánh sáng có thể được biến đổi thành điện năng rồi thành ánh sáng lần nữa ở LED.',
+    requiredPath: ['solar', 'switch', 'led'],
+    success: 'Đèn LED đã sáng bằng nguồn điện từ pin mặt trời.',
+  },
+  {
+    id: 'propeller', title: 'Động cơ chân vịt', emoji: '✣',
+    description: 'Ráp Pin → Công tắc → Mô tơ → Trục → Chân vịt.',
+    lesson: 'Chân vịt quay quanh đúng trục sẽ đẩy môi trường về sau và tạo lực đẩy về trước.',
+    requiredPath: ['battery', 'switch', 'motor', 'shaft', 'propeller'],
+    success: 'Chân vịt đang quay đúng quanh trục truyền động.',
+  },
+  {
+    id: 'pump', title: 'Máy bơm mini', emoji: '💧',
+    description: 'Ráp Pin → Công tắc → Mô tơ → Trục → Bơm nước.',
+    lesson: 'Cánh bơm nhận mô-men từ trục và truyền năng lượng cho chất lỏng.',
+    requiredPath: ['battery', 'switch', 'motor', 'shaft', 'pump'],
+    success: 'Cánh bơm đã quay. Chuỗi điện → mô tơ → trục → bơm hoạt động đúng.',
+  },
+  {
+    id: 'buzzer', title: 'Chuông báo điện', emoji: '🔔',
+    description: 'Ráp Pin → Công tắc → Còi điện.',
+    lesson: 'Khi mạch kín, điện làm phần tử trong còi rung để tạo âm thanh.',
+    requiredPath: ['battery', 'switch', 'buzzer'],
+    success: 'Mạch báo động đã được cấp điện đúng đường.',
   },
 ];
