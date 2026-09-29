@@ -8,6 +8,35 @@ export function portsCompatible(a: PortDefinition, b: PortDefinition): boolean {
   return (a.direction === 'out' && b.direction === 'in') || (a.direction === 'in' && b.direction === 'out');
 }
 
+const ROAD_PARTS = new Set<ModuleType>(['road-straight', 'road-curve', 'bridge']);
+const RAIL_PARTS = new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'bridge']);
+const RUNWAY_PARTS = new Set<ModuleType>(['runway']);
+const WATERFRONT_PARTS = new Set<ModuleType>(['harbor', 'dock']);
+const TRAIN_PARTS = new Set<ModuleType>(['train-engine', 'train-wagon']);
+const TERRAIN_PARTS = new Set<ModuleType>(['grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'sea-tile']);
+
+export function modulesStructurallyCompatible(a: ModuleType, b: ModuleType): boolean {
+  if (TRAIN_PARTS.has(a) && TRAIN_PARTS.has(b)) return true;
+  if (ROAD_PARTS.has(a) && ROAD_PARTS.has(b)) return true;
+  if (RAIL_PARTS.has(a) && RAIL_PARTS.has(b)) return true;
+  if (RUNWAY_PARTS.has(a) && RUNWAY_PARTS.has(b)) return true;
+  if (WATERFRONT_PARTS.has(a) && WATERFRONT_PARTS.has(b)) return true;
+  if (TERRAIN_PARTS.has(a) && TERRAIN_PARTS.has(b)) return true;
+  if (MODULES[a].category === 'building' && MODULES[b].category === 'building') return true;
+  return false;
+}
+
+export function modulePortsCompatible(
+  aType: ModuleType,
+  aPort: PortDefinition,
+  bType: ModuleType,
+  bPort: PortDefinition,
+): boolean {
+  if (!portsCompatible(aPort, bPort)) return false;
+  if (aPort.signal !== 'structural') return true;
+  return modulesStructurallyCompatible(aType, bType);
+}
+
 export function normalizeConnection(
   aModule: ModuleInstance,
   aPort: PortDefinition,
@@ -72,7 +101,7 @@ export class ConnectionGraph {
         for (const other of this.modules.values()) {
           if (other.id === id) continue;
           for (const otherPort of MODULES[other.type].ports) {
-            if (this.isPortUsed(other.id, otherPort.id) || !portsCompatible(movingPort, otherPort)) continue;
+            if (this.isPortUsed(other.id, otherPort.id) || !modulePortsCompatible(moving.type, movingPort, other.type, otherPort)) continue;
             if (worldAxis(moving, movingPort, rotationY).dot(worldAxis(other, otherPort)) >= -.72) continue;
             const delta = worldPort(other, otherPort).sub(worldPort(moving, movingPort, rotationY));
             const distance = delta.length();
@@ -110,7 +139,7 @@ export class ConnectionGraph {
         const movingPortWorld = new Vector3(...movingPort.position).applyAxisAngle(axisY, rotationY).add(movingPosition);
 
         for (const targetPort of MODULES[target.type].ports) {
-          if (this.isPortUsed(targetId, targetPort.id) || !portsCompatible(movingPort, targetPort)) continue;
+          if (this.isPortUsed(targetId, targetPort.id) || !modulePortsCompatible(moving.type, movingPort, target.type, targetPort)) continue;
           const targetAxis = new Vector3(...targetPort.axis).applyAxisAngle(axisY, target.rotationY);
           if (movingAxis.dot(targetAxis) >= -.72) continue;
 
@@ -166,7 +195,7 @@ export class ConnectionGraph {
       for (const other of this.modules.values()) {
         if (other.id === id) continue;
         for (const otherPort of MODULES[other.type].ports) {
-          if (this.isPortUsed(other.id, otherPort.id) || !portsCompatible(movingPort, otherPort)) continue;
+          if (this.isPortUsed(other.id, otherPort.id) || !modulePortsCompatible(moving.type, movingPort, other.type, otherPort)) continue;
           if (worldAxis(moving, movingPort).dot(worldAxis(other, otherPort)) >= -.72) continue;
           const distance = worldPort(other, otherPort).distanceTo(worldPort(moving, movingPort));
           if (distance <= .16) pairs.push({ movingPort, other, otherPort, distance });
