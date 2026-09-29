@@ -22,11 +22,13 @@ app.innerHTML = `
     </div>
   </section>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.5.0</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.6.0</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
-      <button id="saveBtn" class="icon-btn" title="Lưu">💾</button><button id="resetBtn" class="icon-btn" title="Làm lại">↺</button>
+      <button id="undoBtn" class="icon-btn" title="Hoàn tác" aria-label="Hoàn tác">↶</button>
+      <button id="redoBtn" class="icon-btn" title="Làm lại thao tác" aria-label="Làm lại thao tác">↷</button>
+      <button id="saveBtn" class="icon-btn" title="Lưu">💾</button><button id="resetBtn" class="icon-btn" title="Xóa thế giới">🗑️</button>
     </div>
   </header>
   <aside class="mission panel" id="missionPanel">
@@ -38,7 +40,12 @@ app.innerHTML = `
     <div class="empty">Chạm một mô-đun để xem thông tin.</div>
   </aside>
   <nav class="camera-bar panel"><button data-camera="iso" class="active">◩ Chéo</button><button data-camera="top">▦ Trên</button><button data-camera="front">▤ Trước</button></nav>
-  <section class="palette panel"><div class="palette-title"><b>Kho mô-đun</b><span>${PALETTE.length} mô-đun · chọn theo nhóm</span></div><div class="category-tabs" id="categoryTabs"></div><div class="parts" id="parts"></div></section>
+  <section class="palette panel">
+    <div class="palette-title"><b>Kho mô-đun</b><span>${PALETTE.length} mô-đun · chọn theo nhóm</span></div>
+    <div class="palette-tools"><input id="moduleSearch" type="search" inputmode="search" autocomplete="off" placeholder="🔎 Tìm xe, nhà, mô tơ, cây..." aria-label="Tìm mô-đun" /></div>
+    <div class="category-tabs" id="categoryTabs"></div>
+    <div class="parts" id="parts"></div>
+  </section>
   <div class="coach" id="coach">Chọn một mô-đun ở kho phía dưới để bắt đầu.</div>
   <div class="toast hidden" id="toast"></div>
 `;
@@ -55,14 +62,38 @@ let toastTimer = 0;
 let completedMissionId: string | null = null;
 
 function showToast(text: string) { toast.textContent = text; toast.classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.classList.add('hidden'), 2200); }
-function save() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); localStorage.setItem('le3d-mission', String(missionIndex)); showToast('💾 Đã lưu phòng lab trên thiết bị'); }
+function save() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); localStorage.setItem('le3d-mission', String(missionIndex)); showToast('💾 Đã lưu thế giới trên thiết bị'); }
 function load() { try { const raw = localStorage.getItem('le3d-project'); if (raw) graph.restore(JSON.parse(raw)); } catch { localStorage.removeItem('le3d-project'); } }
 
 load();
+
+let history = [JSON.stringify(graph.serialize())];
+let historyIndex = 0;
+let restoringHistory = false;
+
+function updateHistoryButtons() {
+  const undo = document.querySelector<HTMLButtonElement>('#undoBtn');
+  const redo = document.querySelector<HTMLButtonElement>('#redoBtn');
+  if (undo) undo.disabled = historyIndex <= 0;
+  if (redo) redo.disabled = historyIndex >= history.length - 1;
+}
+
+function recordHistory() {
+  if (restoringHistory) return;
+  const snapshot = JSON.stringify(graph.serialize());
+  if (snapshot === history[historyIndex]) return;
+  history = history.slice(0, historyIndex + 1);
+  history.push(snapshot);
+  if (history.length > 60) history.shift();
+  historyIndex = history.length - 1;
+  updateHistoryButtons();
+}
+
 const workbench = new Workbench(canvas, graph, {
   canEdit: () => mode === 'build',
   onSelect: renderInspector,
   onGraphChanged: () => {
+    recordHistory();
     saveQuietly(); renderInspector(workbench.selectedId);
     if (mode === 'run') evaluateRun(); else updateMissionHint();
   },
@@ -136,6 +167,7 @@ function addModule(type: ModuleType) {
 
 const parts = document.querySelector<HTMLDivElement>('#parts')!;
 const categoryTabs = document.querySelector<HTMLDivElement>('#categoryTabs')!;
+const moduleSearch = document.querySelector<HTMLInputElement>('#moduleSearch')!;
 const CATEGORY_META: Record<ModuleCategory | 'all', { label: string; icon: string }> = {
   all: { label: 'Tất cả', icon: '🧰' },
   energy: { label: 'Nguồn', icon: '⚡' },
@@ -150,17 +182,32 @@ const CATEGORY_META: Record<ModuleCategory | 'all', { label: string; icon: strin
   nature: { label: 'Thiên nhiên', icon: '🌳' },
 };
 let activeCategory: ModuleCategory | 'all' = 'all';
+let moduleQuery = '';
+
+const searchable = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 function renderPalette() {
   parts.innerHTML = '';
+  const q = searchable(moduleQuery.trim());
+  let shown = 0;
   for (const type of PALETTE) {
     const d = MODULES[type];
     if (activeCategory !== 'all' && d.category !== activeCategory) continue;
+    const haystack = searchable([type, d.name, d.description, d.science, CATEGORY_META[d.category].label].join(' '));
+    if (q && !haystack.includes(q)) continue;
     const b = document.createElement('button');
     b.className = 'part ' + d.category;
     b.innerHTML = '<span>' + d.icon + '</span><b>' + d.name + '</b><small>' + CATEGORY_META[d.category].label + '</small>';
     b.onclick = () => addModule(type);
     parts.appendChild(b);
+    shown++;
+  }
+  if (!shown) {
+    const empty = document.createElement('div');
+    empty.className = 'palette-empty';
+    empty.textContent = 'Không tìm thấy mô-đun phù hợp.';
+    parts.appendChild(empty);
   }
 }
 for (const category of ['all', 'energy', 'control', 'motion', 'output', 'fluid', 'vehicle', 'transport', 'building', 'nature', 'structure'] as const) {
@@ -175,6 +222,10 @@ for (const category of ['all', 'energy', 'control', 'motion', 'output', 'fluid',
   };
   categoryTabs.appendChild(b);
 }
+moduleSearch.addEventListener('input', () => {
+  moduleQuery = moduleSearch.value;
+  renderPalette();
+});
 renderPalette();
 const palette = document.querySelector<HTMLElement>('.palette')!;
 const positionCoach = () => document.documentElement.style.setProperty('--palette-clearance', `${innerHeight - palette.getBoundingClientRect().top + 12}px`);
@@ -286,8 +337,36 @@ runBtn.onclick = async () => {
   setMode(mode === 'run' ? 'build' : 'run');
 };
 
+function restoreHistory(index: number) {
+  if (index < 0 || index >= history.length || index === historyIndex) return;
+  if (mode === 'run') setMode('build');
+  restoringHistory = true;
+  try {
+    graph.restore(JSON.parse(history[index]));
+    historyIndex = index;
+    workbench.rebuildFromGraph();
+    saveQuietly();
+    updateMissionHint();
+    updateHistoryButtons();
+  } finally {
+    restoringHistory = false;
+  }
+}
+
+document.querySelector<HTMLButtonElement>('#undoBtn')!.onclick = () => restoreHistory(historyIndex - 1);
+document.querySelector<HTMLButtonElement>('#redoBtn')!.onclick = () => restoreHistory(historyIndex + 1);
+updateHistoryButtons();
+
 document.querySelector<HTMLButtonElement>('#saveBtn')!.onclick = save;
-document.querySelector<HTMLButtonElement>('#resetBtn')!.onclick = () => { graph.restore({ modules: [], connections: [] }); workbench.rebuildFromGraph(); saveQuietly(); setMode('build'); coach.textContent = 'Thế giới đã được làm sạch. Con có thể bắt đầu một công trình mới!'; showToast('↺ Đã làm sạch bàn lắp ráp'); };
+document.querySelector<HTMLButtonElement>('#resetBtn')!.onclick = () => {
+  if (mode === 'run') setMode('build');
+  graph.restore({ modules: [], connections: [] });
+  workbench.rebuildFromGraph();
+  recordHistory();
+  saveQuietly();
+  coach.textContent = 'Thế giới đã được làm sạch. Con có thể bắt đầu một công trình mới!';
+  showToast('🗑️ Đã làm sạch thế giới');
+};
 
 document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onclick = () => { document.querySelectorAll('[data-camera]').forEach(x => x.classList.remove('active')); b.classList.add('active'); workbench.setCamera(b.dataset.camera as 'iso' | 'top' | 'front'); });
 
@@ -329,7 +408,7 @@ document.body.appendChild(audioToggle);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-5', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-6', {
         scope: './',
         updateViaCache: 'none',
       });
