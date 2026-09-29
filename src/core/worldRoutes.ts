@@ -38,17 +38,36 @@ function routePoint(module: ModuleInstance, local: [number, number, number]) {
   return point;
 }
 
+function center(module: ModuleInstance) {
+  return new Vector3(
+    module.position[0],
+    module.position[1] + routeHeightOffset(module),
+    module.position[2],
+  );
+}
+
 function connectionPoint(graph: ConnectionGraph, connection: Connection, moduleId: string): Vector3 | null {
   const module = graph.modules.get(moduleId);
   if (!module) return null;
   const portId = connection.fromModuleId === moduleId ? connection.fromPortId : connection.toPortId;
   const port = MODULES[module.type].ports.find(p => p.id === portId);
-  if (!port) return null;
-  return routePoint(module, port.position);
+  return port ? routePoint(module, port.position) : null;
 }
 
-function center(module: ModuleInstance) {
-  return new Vector3(module.position[0], module.position[1] + routeHeightOffset(module), module.position[2]);
+function connectionMidpoint(graph: ConnectionGraph, connection: Connection) {
+  const a = connectionPoint(graph, connection, connection.fromModuleId);
+  const b = connectionPoint(graph, connection, connection.toModuleId);
+  if (!a) return b;
+  if (!b) return a;
+  return a.add(b).multiplyScalar(.5);
+}
+
+function connectionBetween(graph: ConnectionGraph, a: string, b: string) {
+  return [...graph.connections.values()].find(c =>
+    c.signal === 'structural' &&
+    ((c.fromModuleId === a && c.toModuleId === b) ||
+      (c.fromModuleId === b && c.toModuleId === a))
+  );
 }
 
 function structuralNeighbors(graph: ConnectionGraph, id: string, allowed: Set<ModuleType>) {
@@ -65,7 +84,12 @@ function structuralNeighbors(graph: ConnectionGraph, id: string, allowed: Set<Mo
   return out;
 }
 
-function nearestRouteModule(graph: ConnectionGraph, vehicle: ModuleInstance, allowed: Set<ModuleType>, maxDistance: number) {
+function nearestRouteModule(
+  graph: ConnectionGraph,
+  vehicle: ModuleInstance,
+  allowed: Set<ModuleType>,
+  maxDistance: number,
+) {
   let best: ModuleInstance | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const module of graph.modules.values()) {
@@ -81,31 +105,34 @@ function nearestRouteModule(graph: ConnectionGraph, vehicle: ModuleInstance, all
   return best && bestDistance <= maxDistance * maxDistance ? best : null;
 }
 
-function singleModulePath(module: ModuleInstance, kind: RouteKind) {
+function curveRadius(module: ModuleInstance) {
+  const ports = MODULES[module.type].ports.filter(p => p.signal === 'structural');
+  const radius = ports.reduce((best, p) => Math.max(best, Math.hypot(p.position[0], p.position[2])), 0);
+  return radius || (module.type === 'road-curve' ? .925 : 1.15);
+}
+
+function singleModulePath(module: ModuleInstance, kind: RouteKind): Vector3[] {
   const def = MODULES[module.type];
 
   if (kind === 'runway') {
     const half = Math.max(1.7, def.size[2] * .46);
     return [
-      routePoint(module, [0, 0, -half]).toArray() as [number, number, number],
-      routePoint(module, [0, 0, 0]).toArray() as [number, number, number],
-      routePoint(module, [0, 0, half]).toArray() as [number, number, number],
+      routePoint(module, [0, 0, -half]),
+      routePoint(module, [0, 0, 0]),
+      routePoint(module, [0, 0, half]),
     ];
   }
 
   if (module.type === 'road-curve' || module.type === 'rail-curve') {
-    const radius = module.type === 'road-curve' ? 1.28 : 1.3;
-    const points: [number, number, number][] = [];
-    // The rendered quarter-circle is centered on the module origin:
-    // inlet at (0,-r), outlet at (+r,0).
-    for (let i = 0; i <= 8; i++) {
-      const angle = (Math.PI / 2) * (1 - i / 8);
-      const local: [number, number, number] = [
+    const radius = curveRadius(module);
+    const points: Vector3[] = [];
+    for (let i = 0; i <= 12; i++) {
+      const angle = (Math.PI / 2) * (1 - i / 12);
+      points.push(routePoint(module, [
         Math.cos(angle) * radius,
         0,
         -Math.sin(angle) * radius,
-      ];
-      points.push(routePoint(module, local).toArray() as [number, number, number]);
+      ]));
     }
     return points;
   }
@@ -113,21 +140,60 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
   const structuralPorts = def.ports.filter(p => p.signal === 'structural');
   if (structuralPorts.length === 2) {
     return [
-      routePoint(module, structuralPorts[0].position).toArray() as [number, number, number],
-      center(module).toArray() as [number, number, number],
-      routePoint(module, structuralPorts[1].position).toArray() as [number, number, number],
+      routePoint(module, structuralPorts[0].position),
+      center(module),
+      routePoint(module, structuralPorts[1].position),
     ];
   }
 
   const alongZ = def.size[2] >= def.size[0];
   const half = Math.max(1, (alongZ ? def.size[2] : def.size[0]) * .46);
-  const a: [number, number, number] = alongZ ? [0, 0, -half] : [-half, 0, 0];
-  const b: [number, number, number] = alongZ ? [0, 0, half] : [half, 0, 0];
-  return [
-    routePoint(module, a).toArray() as [number, number, number],
-    center(module).toArray() as [number, number, number],
-    routePoint(module, b).toArray() as [number, number, number],
-  ];
+  return alongZ
+    ? [routePoint(module, [0, 0, -half]), center(module), routePoint(module, [0, 0, half])]
+    : [routePoint(module, [-half, 0, 0]), center(module), routePoint(module, [half, 0, 0])];
+}
+
+function traversalThroughModule(
+  graph: ConnectionGraph,
+  module: ModuleInstance,
+  kind: RouteKind,
+  previousConnection?: Connection,
+  nextConnection?: Connection,
+  approachPoint?: Vector3,
+) {
+  const base = singleModulePath(module, kind);
+  const entry = previousConnection ? connectionMidpoint(graph, previousConnection) : null;
+  const exit = nextConnection ? connectionMidpoint(graph, nextConnection) : null;
+
+  // Junction pieces can have 3–4 exits. Route through the exact ports chosen
+  // by the current branch instead of assuming a fixed axis.
+  const structuralCount = MODULES[module.type].ports.filter(p => p.signal === 'structural').length;
+  if (structuralCount > 2 && (entry || exit)) {
+    if (entry && exit) return [entry, center(module), exit];
+    const known = entry ?? exit!;
+    const alternatives = MODULES[module.type].ports
+      .filter(p => p.signal === 'structural')
+      .map(p => routePoint(module, p.position))
+      .filter(p => p.distanceTo(known) > .15);
+    const other = alternatives.sort((a, b) => b.distanceTo(known) - a.distanceTo(known))[0] ?? center(module);
+    return entry ? [entry, center(module), other] : [other, center(module), exit!];
+  }
+
+  let oriented = base.map(p => p.clone());
+  const reference = entry ?? approachPoint;
+  if (reference && oriented.length > 1) {
+    const firstDistance = oriented[0].distanceTo(reference);
+    const lastDistance = oriented[oriented.length - 1].distanceTo(reference);
+    if (lastDistance < firstDistance) oriented.reverse();
+  } else if (exit && oriented.length > 1) {
+    const firstDistance = oriented[0].distanceTo(exit);
+    const lastDistance = oriented[oriented.length - 1].distanceTo(exit);
+    if (firstDistance < lastDistance) oriented.reverse();
+  }
+
+  if (entry) oriented[0] = entry;
+  if (exit) oriented[oriented.length - 1] = exit;
+  return oriented;
 }
 
 export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [number, number, number][] {
@@ -135,6 +201,7 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
   if (!vehicle) return [];
   const kind = routeKindForVehicle(vehicle.type);
   if (!kind) return [];
+
   const allowed = ROUTE_TYPES[kind];
   const maxDistance = kind === 'runway' ? 5.5 : kind === 'rail' ? 3.8 : 4.2;
   const nearest = nearestRouteModule(graph, vehicle, allowed, maxDistance);
@@ -144,14 +211,16 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
   const queue = [nearest.id];
   while (queue.length) {
     const id = queue.shift()!;
-    for (const n of structuralNeighbors(graph, id, allowed)) {
-      if (component.has(n.id)) continue;
-      component.add(n.id);
-      queue.push(n.id);
+    for (const neighbor of structuralNeighbors(graph, id, allowed)) {
+      if (component.has(neighbor.id)) continue;
+      component.add(neighbor.id);
+      queue.push(neighbor.id);
     }
   }
 
-  if (component.size === 1) return singleModulePath(nearest, kind);
+  if (component.size === 1) {
+    return singleModulePath(nearest, kind).map(p => p.toArray() as [number, number, number]);
+  }
 
   const endpoints = [...component].filter(id =>
     structuralNeighbors(graph, id, allowed).filter(n => component.has(n.id)).length <= 1
@@ -168,17 +237,17 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
   while (current && !used.has(current)) {
     ordered.push(current);
     used.add(current);
-    const options: { id: string; connection: Connection }[] = structuralNeighbors(graph, current, allowed)
+    const options = structuralNeighbors(graph, current, allowed)
       .filter(n => component.has(n.id) && n.id !== previous && !used.has(n.id));
-    if (!options.length) break;
 
+    if (!options.length) break;
     if (previous) {
-      const p = center(graph.modules.get(previous)!);
-      const here = center(graph.modules.get(current)!);
-      const incoming = here.clone().sub(p).normalize();
+      const previousCenter = center(graph.modules.get(previous)!);
+      const currentCenter = center(graph.modules.get(current)!);
+      const incoming = currentCenter.clone().sub(previousCenter).normalize();
       options.sort((a, b) => {
-        const da = center(graph.modules.get(a.id)!).sub(here).normalize();
-        const db = center(graph.modules.get(b.id)!).sub(here).normalize();
+        const da = center(graph.modules.get(a.id)!).sub(currentCenter).normalize();
+        const db = center(graph.modules.get(b.id)!).sub(currentCenter).normalize();
         return incoming.angleTo(da) - incoming.angleTo(db);
       });
     }
@@ -188,23 +257,23 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
   }
 
   const points: Vector3[] = [];
-  const push = (p: Vector3) => {
-    if (!points.length || points[points.length - 1].distanceTo(p) > .08) points.push(p);
+  const push = (point: Vector3) => {
+    if (!points.length || points[points.length - 1].distanceTo(point) > .055) points.push(point.clone());
   };
 
-  push(center(graph.modules.get(ordered[0])!));
-  for (let i = 0; i < ordered.length - 1; i++) {
-    const a = ordered[i], b = ordered[i + 1];
-    const connection = [...graph.connections.values()].find(c =>
-      c.signal === 'structural' &&
-      ((c.fromModuleId === a && c.toModuleId === b) || (c.fromModuleId === b && c.toModuleId === a))
+  for (let i = 0; i < ordered.length; i++) {
+    const module = graph.modules.get(ordered[i])!;
+    const previousConnection = i > 0 ? connectionBetween(graph, ordered[i - 1], ordered[i]) : undefined;
+    const nextConnection = i < ordered.length - 1 ? connectionBetween(graph, ordered[i], ordered[i + 1]) : undefined;
+    const segment = traversalThroughModule(
+      graph,
+      module,
+      kind,
+      previousConnection,
+      nextConnection,
+      points[points.length - 1] ?? center(vehicle),
     );
-    if (connection) {
-      const pa = connectionPoint(graph, connection, a);
-      const pb = connectionPoint(graph, connection, b);
-      if (pa && pb) push(pa.clone().add(pb).multiplyScalar(.5));
-    }
-    push(center(graph.modules.get(b)!));
+    segment.forEach(push);
   }
 
   return points.map(p => p.toArray() as [number, number, number]);
