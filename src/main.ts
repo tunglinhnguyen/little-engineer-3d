@@ -18,7 +18,7 @@ app.innerHTML = `
     </div>
   </header>
   <aside class="mission panel" id="missionPanel">
-    <div class="mission-head"><span id="missionEmoji">💡</span><div><small>NHIỆM VỤ</small><b id="missionTitle"></b></div></div>
+    <div class="mission-head"><span id="missionEmoji">💡</span><div class="mission-label"><small>NHIỆM VỤ</small><b id="missionTitle"></b></div><button id="missionToggle" class="mission-toggle" aria-label="Thu nhỏ nhiệm vụ" title="Thu nhỏ nhiệm vụ">−</button></div>
     <p id="missionDescription"></p><div class="lesson" id="missionLesson"></div>
     <div class="mission-actions"><button id="prevMission">‹</button><span id="missionCount"></span><button id="nextMission">›</button></div>
   </aside>
@@ -58,11 +58,39 @@ workbench.rebuildFromGraph();
 
 function saveQuietly() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); }
 
+function findFreePosition(type: ModuleType): [number, number, number] {
+  const def = MODULES[type];
+  const radius = Math.max(def.size[0], def.size[2]) * .5 + .22;
+  const xs = [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8, -6.4, 6.4];
+  const zs = [2.8, 1.35, -.1, -1.55, -3, 4.25, -4.45];
+  for (const z of zs) {
+    for (const x of xs) {
+      const free = [...graph.modules.values()].every(existing => {
+        const other = MODULES[existing.type];
+        const otherRadius = Math.max(other.size[0], other.size[2]) * .5 + .22;
+        const dx = x - existing.position[0], dz = z - existing.position[2];
+        return Math.hypot(dx, dz) >= radius + otherRadius;
+      });
+      if (free) return [x, .65, z];
+    }
+  }
+  const n = graph.modules.size;
+  return [((n % 7) - 3) * 1.65, .65, -5.8 - Math.floor(n / 7) * 1.5];
+}
+
 function addModule(type: ModuleType) {
   if (mode !== 'build') { showToast('⏹ Dừng mô phỏng trước khi thay linh kiện'); return; }
-  const id = `${type}-${crypto.randomUUID().slice(0, 8)}`; const spread = (graph.modules.size % 5) - 2;
-  const instance: ModuleInstance = { id, type, position: [spread * 1.1, .65, 2.8 - Math.floor(graph.modules.size / 5) * .9], rotationY: 0, switchOn: type === 'switch' ? true : undefined };
-  workbench.addInstance(instance); speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description}`);
+  const id = `${type}-${crypto.randomUUID().slice(0, 8)}`;
+  const instance: ModuleInstance = {
+    id,
+    type,
+    position: findFreePosition(type),
+    rotationY: 0,
+    switchOn: type === 'switch' ? true : undefined,
+  };
+  workbench.addInstance(instance);
+  showToast(`➕ Đã đặt ${MODULES[type].name} vào chỗ trống`);
+  speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description}`);
 }
 
 const parts = document.querySelector<HTMLDivElement>('#parts')!;
@@ -83,7 +111,8 @@ function renderInspector(id: string | null) {
     return `<li class="${other ? 'connected' : 'disconnected'}">${other ? '✓' : '○'} ${name}: ${other ? `đã nối ${MODULES[other.type].name}` : 'chưa nối'}</li>`;
   }).join('');
   const disabled = mode === 'run' ? 'disabled' : '';
-  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p><ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${m.type === 'switch' ? `<button id="toggleSwitch">${m.switchOn === false ? '🟢 Bật' : '🔴 Tắt'} công tắc</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
+  const switchHint = m.type === 'switch' ? '<div class="switch-hint">👆 Chạm 2 lần trực tiếp vào công tắc để bật/tắt nhanh.</div>' : '';
+  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${m.type === 'switch' ? `<button id="toggleSwitch">${m.switchOn === false ? '🟢 Bật' : '🔴 Tắt'} công tắc</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
   document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected(); document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => workbench.removeSelected();
   const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch'); if (sw) sw.onclick = () => { workbench.toggleSwitch(); const current = graph.modules.get(id); if (current) { renderInspector(id); speak(current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch đã nối đúng, điện sẽ chạy.'); } };
 }
@@ -96,6 +125,18 @@ function updateMissionHint(state = simulator.evaluate()) {
   coach.textContent = feedback.message;
   return feedback;
 }
+
+const missionPanel = document.querySelector<HTMLElement>('#missionPanel')!;
+const missionToggle = document.querySelector<HTMLButtonElement>('#missionToggle')!;
+const setMissionCollapsed = (collapsed: boolean) => {
+  missionPanel.classList.toggle('collapsed', collapsed);
+  missionToggle.textContent = collapsed ? '+' : '−';
+  missionToggle.title = collapsed ? 'Mở nhiệm vụ' : 'Thu nhỏ nhiệm vụ';
+  missionToggle.setAttribute('aria-label', missionToggle.title);
+  localStorage.setItem('le3d-mission-collapsed', collapsed ? '1' : '0');
+};
+missionToggle.onclick = () => setMissionCollapsed(!missionPanel.classList.contains('collapsed'));
+setMissionCollapsed(localStorage.getItem('le3d-mission-collapsed') === '1');
 
 document.querySelector<HTMLButtonElement>('#prevMission')!.onclick = () => { missionIndex = (missionIndex - 1 + MISSIONS.length) % MISSIONS.length; completedMissionId = null; renderMission(true); if (mode === 'run') evaluateRun(); };
 document.querySelector<HTMLButtonElement>('#nextMission')!.onclick = () => { missionIndex = (missionIndex + 1) % MISSIONS.length; completedMissionId = null; renderMission(true); if (mode === 'run') evaluateRun(); };
