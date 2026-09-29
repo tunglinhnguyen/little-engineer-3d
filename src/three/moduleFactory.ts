@@ -13,7 +13,8 @@ const COLORS: Partial<Record<ModuleType, number>> = {
   'water-tank': 0x69bfee, pipe: 0x76a9bf, valve: 0xe7874f, pump: 0x4fb4d8, nozzle: 0x6caecb,
   chassis: 0x788896, axle: 0x8e9aa5, differential: 0x607889, gearbox: 0x6b8092,
   'car-base': 0xe55d5d, 'motorcycle-base': 0x436caa, 'train-engine': 0x4b9c68, 'train-wagon': 0xc58a4d,
-  'road-straight': 0x555b60, 'road-curve': 0x555b60, 'rail-straight': 0x69757d, 'rail-curve': 0x69757d, 'rail-crossing': 0x69757d, bridge: 0x8c8f91,
+  'road-straight': 0x555b60, 'road-curve': 0x555b60, 'road-crossing': 0x555b60, 'road-t-junction': 0x555b60,
+  'rail-straight': 0x69757d, 'rail-curve': 0x69757d, 'rail-crossing': 0x69757d, bridge: 0x8c8f91, 'rail-bridge': 0x7d858b,
   foundation: 0xc9c3b7, wall: 0xe1b77b, 'door-wall': 0xd9a66d, 'window-wall': 0xd9a66d, roof: 0xb55b55, column: 0xd0c7ba, fence: 0x9a6f4c,
   'grass-tile': 0x70b55a, 'soil-tile': 0x9a6f48, 'water-tile': 0x54bde8, 'river-tile': 0x48b4df,
   hill: 0x76aa58, mountain: 0x879098, tree: 0x5f9d55, cloud: 0xf5f8fb, rock: 0x7f858a,
@@ -584,6 +585,56 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     }
   }
 
+  if (instance.type === 'road-crossing' || instance.type === 'road-t-junction') {
+    g.remove(body);
+    const asphalt = std(0x4f5559);
+    const vertical = mesh(new THREE.BoxGeometry(1.5, .1, 2.7), asphalt);
+    vertical.position.y = -.55;
+    g.add(vertical);
+    const horizontal = mesh(new THREE.BoxGeometry(2.7, .1, 1.5), asphalt.clone());
+    horizontal.position.y = -.55;
+    g.add(horizontal);
+
+    if (instance.type === 'road-t-junction') {
+      const cap = mesh(new THREE.BoxGeometry(1.52, .105, .7), std(0x70a75c));
+      cap.position.set(0, -.545, .98);
+      g.add(cap);
+    }
+
+    const directions = instance.type === 'road-crossing'
+      ? [
+          { axis: 'z' as const, fixed: 0 },
+          { axis: 'x' as const, fixed: 0 },
+        ]
+      : [
+          { axis: 'x' as const, fixed: 0 },
+          { axis: 'z' as const, fixed: -.58 },
+        ];
+    for (const dir of directions) {
+      for (let p = -1.05; p <= 1.05; p += .52) {
+        const dash = mesh(
+          new THREE.BoxGeometry(dir.axis === 'z' ? .07 : .26, .025, dir.axis === 'z' ? .26 : .07),
+          std(0xf4d36c),
+        );
+        dash.position.set(dir.axis === 'x' ? p : dir.fixed, -.48, dir.axis === 'z' ? p : dir.fixed);
+        g.add(dash);
+      }
+    }
+
+    if (instance.type === 'road-crossing') {
+      for (const sign of [-1, 1]) {
+        const zebra = new THREE.Group();
+        for (let i = -2; i <= 2; i++) {
+          const stripe = mesh(new THREE.BoxGeometry(.18, .022, .42), std(0xf3f3ee));
+          stripe.position.x = i * .26;
+          zebra.add(stripe);
+        }
+        zebra.position.set(0, -.47, sign * .84);
+        g.add(zebra);
+      }
+    }
+  }
+
   if (instance.type === 'rail-straight' || instance.type === 'rail-crossing') {
     g.remove(body);
     const addLine = (rotated = false) => {
@@ -627,6 +678,33 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     for (const x of [-.82, .82]) {
       const rail = mesh(new THREE.BoxGeometry(.08, .25, 2.9), std(0xa9b1b5, .25));
       rail.position.set(x, .64, 0); g.add(rail);
+    }
+  }
+
+  if (instance.type === 'rail-bridge') {
+    g.remove(body);
+    const deck = mesh(new THREE.BoxGeometry(1.75, .18, 2.95), std(0x7d858b, .28));
+    deck.position.y = .36;
+    g.add(deck);
+    for (const x of [-.66, .66]) for (const z of [-1.08, 1.08]) {
+      const pier = mesh(new THREE.BoxGeometry(.16, .86, .16), std(0x697177, .28));
+      pier.position.set(x, -.08, z);
+      g.add(pier);
+    }
+    for (const x of [-.42, .42]) {
+      const rail = mesh(new THREE.BoxGeometry(.08, .12, 2.82), std(0x8d989f, .6));
+      rail.position.set(x, .52, 0);
+      g.add(rail);
+    }
+    for (let z = -1.2; z <= 1.2; z += .3) {
+      const sleeper = mesh(new THREE.BoxGeometry(1.08, .07, .09), std(0x805b3c));
+      sleeper.position.set(0, .43, z);
+      g.add(sleeper);
+    }
+    for (const x of [-.82, .82]) {
+      const guard = mesh(new THREE.BoxGeometry(.06, .28, 2.9), std(0xadb5ba, .35));
+      guard.position.set(x, .62, 0);
+      g.add(guard);
     }
   }
 
