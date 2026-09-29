@@ -9,6 +9,16 @@ const LR = {
   fluidOut: { id: 'fluid-out', signal: 'fluid' as const, direction: 'out' as const, position: [0, 0, 0.72] as [number, number, number], axis: [0, 0, 1] as [number, number, number] },
 };
 
+const STRUCT_X = [
+  { id: 'structure-left', signal: 'structural' as const, direction: 'bi' as const, position: [-.76, 0, 0] as [number, number, number], axis: [-1, 0, 0] as [number, number, number] },
+  { id: 'structure-right', signal: 'structural' as const, direction: 'bi' as const, position: [.76, 0, 0] as [number, number, number], axis: [1, 0, 0] as [number, number, number] },
+];
+const STRUCT_Z = [
+  { id: 'structure-back', signal: 'structural' as const, direction: 'bi' as const, position: [0, 0, -.76] as [number, number, number], axis: [0, 0, -1] as [number, number, number] },
+  { id: 'structure-front', signal: 'structural' as const, direction: 'bi' as const, position: [0, 0, .76] as [number, number, number], axis: [0, 0, 1] as [number, number, number] },
+];
+const STRUCT_4 = [...STRUCT_X, ...STRUCT_Z];
+
 export const MODULES: Record<ModuleType, ModuleDefinition> = {
   battery: {
     type: 'battery', name: 'Pin', icon: '🔋', category: 'energy',
@@ -157,6 +167,171 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     size: [.75, .65, 1.15], ports: [LR.fluidIn], behavior: { kind: 'fluid-output' },
   },
 
+  axle: {
+    type: 'axle', name: 'Cầu truyền động', icon: '↔️', category: 'motion',
+    description: 'Truyền mô-men tới cụm bánh xe.', science: 'Cầu xe truyền chuyển động quay từ hộp số tới bánh chủ động.',
+    size: [1.55, .38, .52], ports: [{ ...LR.rotationIn, position: [-.82, 0, 0] }, { ...LR.rotationOut, position: [.82, 0, 0] }], behavior: { kind: 'pass-rotation' },
+  },
+  differential: {
+    type: 'differential', name: 'Vi sai', icon: '⚙️', category: 'motion',
+    description: 'Chia mô-men cho bánh xe khi xe đổi hướng.', science: 'Bộ vi sai cho hai bánh cùng cầu quay với tốc độ khác nhau khi vào cua.',
+    size: [1.25, .72, .9], ports: [LR.rotationIn, LR.rotationOut], behavior: { kind: 'transmission', ratio: .9 },
+  },
+  gearbox: {
+    type: 'gearbox', name: 'Hộp số', icon: '🎚️', category: 'motion',
+    description: 'Giảm tốc và tăng mô-men cho phương tiện.', science: 'Tỉ số truyền đổi tốc độ quay để phù hợp tải và lực kéo.',
+    size: [1.25, .82, .9], ports: [LR.rotationIn, LR.rotationOut], behavior: { kind: 'transmission', ratio: .65 },
+  },
+
+  'car-base': {
+    type: 'car-base', name: 'Khung ô tô', icon: '🚗', category: 'vehicle',
+    description: 'Khung xe điện có bốn bánh chủ động.', science: 'Mô-men từ hệ truyền động làm bánh xe quay và tạo lực kéo tại mặt đường.',
+    size: [2.65, .58, 1.45], ports: [{ ...LR.rotationIn, position: [-1.42, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: 1.0 },
+  },
+  'motorcycle-base': {
+    type: 'motorcycle-base', name: 'Khung xe máy', icon: '🏍️', category: 'vehicle',
+    description: 'Khung xe hai bánh nhận truyền động từ mô tơ.', science: 'Hai bánh thẳng hàng cần quay và giữ cân bằng để xe chuyển động.',
+    size: [2.45, 1.0, .72], ports: [{ ...LR.rotationIn, position: [-1.32, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: 1.15 },
+  },
+  'train-engine': {
+    type: 'train-engine', name: 'Đầu tàu điện', icon: '🚂', category: 'vehicle',
+    description: 'Đầu tàu nhận mô-men và quay các bánh trên ray.', science: 'Bánh tàu có vành gờ để được dẫn hướng bởi đường ray.',
+    size: [2.6, 1.35, 1.18], ports: [{ ...LR.rotationIn, position: [-1.42, 0, 0] }, { ...STRUCT_X[1], position: [1.42, 0, 0], id: 'coupler-front' }], behavior: { kind: 'vehicle', vehicleSpeed: .72 },
+  },
+  'train-wagon': {
+    type: 'train-wagon', name: 'Toa tàu', icon: '🚃', category: 'vehicle',
+    description: 'Toa hàng hoặc toa khách nối sau đầu tàu.', science: 'Khớp nối cho phép các toa truyền lực kéo nhưng vẫn đổi hướng tương đối.',
+    size: [2.35, 1.05, 1.15],
+    ports: [
+      { ...STRUCT_X[0], position: [-1.28, 0, 0], id: 'coupler-back' },
+      { ...STRUCT_X[1], position: [1.28, 0, 0], id: 'coupler-front' },
+    ],
+    behavior: { kind: 'structure' },
+  },
+
+  'road-straight': {
+    type: 'road-straight', name: 'Đường thẳng', icon: '🛣️', category: 'transport',
+    description: 'Đoạn đường để xây mạng giao thông.', science: 'Mặt đường phẳng tạo bề mặt lăn ổn định cho bánh xe.',
+    size: [1.6, .12, 3.0], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.9] })), behavior: { kind: 'structure' },
+  },
+  'road-curve': {
+    type: 'road-curve', name: 'Đường cong', icon: '↪️', category: 'transport',
+    description: 'Đoạn đường đổi hướng 90 độ.', science: 'Bán kính cong càng lớn thì phương tiện đổi hướng càng êm.',
+    size: [2.4, .12, 2.4],
+    ports: [
+      { ...STRUCT_Z[0], position: [0, 0, -1.28], id: 'road-in' },
+      { ...STRUCT_X[1], position: [1.28, 0, 0], id: 'road-out' },
+    ],
+    behavior: { kind: 'structure' },
+  },
+  'rail-straight': {
+    type: 'rail-straight', name: 'Ray thẳng', icon: '🛤️', category: 'transport',
+    description: 'Đoạn đường sắt thẳng.', science: 'Hai thanh ray song song dẫn hướng và chịu tải bánh tàu.',
+    size: [1.45, .2, 3.0], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.9] })), behavior: { kind: 'structure' },
+  },
+  'rail-curve': {
+    type: 'rail-curve', name: 'Ray cong', icon: '🚉', category: 'transport',
+    description: 'Đoạn ray đổi hướng 90 độ.', science: 'Ray cong dẫn hướng đoàn tàu theo quỹ đạo mà không cần đánh lái.',
+    size: [2.5, .2, 2.5],
+    ports: [
+      { ...STRUCT_Z[0], position: [0, 0, -1.3], id: 'rail-in' },
+      { ...STRUCT_X[1], position: [1.3, 0, 0], id: 'rail-out' },
+    ],
+    behavior: { kind: 'structure' },
+  },
+  'rail-crossing': {
+    type: 'rail-crossing', name: 'Giao cắt đường ray', icon: '✚', category: 'transport',
+    description: 'Nút giao hai tuyến ray.', science: 'Nút giao phải giữ khe dẫn hướng liên tục cho vành bánh tàu.',
+    size: [2.3, .2, 2.3], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] })), behavior: { kind: 'structure' },
+  },
+  bridge: {
+    type: 'bridge', name: 'Cầu', icon: '🌉', category: 'transport',
+    description: 'Cầu cho đường hoặc ray vượt sông.', science: 'Dầm cầu truyền tải trọng xuống trụ và nền.',
+    size: [2.0, .65, 3.0], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.9] })), behavior: { kind: 'structure' },
+  },
+
+  foundation: {
+    type: 'foundation', name: 'Nền nhà', icon: '⬜', category: 'building',
+    description: 'Mặt nền để ghép tường và cột.', science: 'Móng và nền phân bố tải công trình xuống đất.',
+    size: [2.2, .24, 2.2], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] })), behavior: { kind: 'structure' },
+  },
+  wall: {
+    type: 'wall', name: 'Tường', icon: '🧱', category: 'building',
+    description: 'Mảng tường xây nhà.', science: 'Tường bao che không gian và có thể tham gia chịu lực.',
+    size: [2.0, 1.65, .28], ports: STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), behavior: { kind: 'structure' },
+  },
+  'door-wall': {
+    type: 'door-wall', name: 'Tường cửa đi', icon: '🚪', category: 'building',
+    description: 'Tường có cửa ra vào.', science: 'Ô cửa cần dầm phía trên để truyền tải quanh khoảng mở.',
+    size: [2.0, 1.65, .28], ports: STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), behavior: { kind: 'structure' },
+  },
+  'window-wall': {
+    type: 'window-wall', name: 'Tường cửa sổ', icon: '🪟', category: 'building',
+    description: 'Tường có cửa lấy sáng.', science: 'Cửa sổ đưa ánh sáng và thông gió vào không gian.',
+    size: [2.0, 1.65, .28], ports: STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), behavior: { kind: 'structure' },
+  },
+  roof: {
+    type: 'roof', name: 'Mái nhà', icon: '🏠', category: 'building',
+    description: 'Mô-đun mái che.', science: 'Mái dốc dẫn nước mưa xuống nhanh và che nắng cho công trình.',
+    size: [2.3, .8, 2.3], ports: [], behavior: { kind: 'structure' },
+  },
+  column: {
+    type: 'column', name: 'Cột', icon: '▮', category: 'building',
+    description: 'Cột chịu lực cho công trình.', science: 'Cột truyền tải trọng thẳng đứng từ dầm và mái xuống móng.',
+    size: [.48, 1.9, .48], ports: [], behavior: { kind: 'structure' },
+  },
+  fence: {
+    type: 'fence', name: 'Hàng rào', icon: '🪵', category: 'building',
+    description: 'Hàng rào phân chia khu vực.', science: 'Các cọc và thanh ngang tạo kết cấu nhẹ nhưng ổn định.',
+    size: [2.0, 1.0, .18], ports: STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), behavior: { kind: 'structure' },
+  },
+
+  'grass-tile': {
+    type: 'grass-tile', name: 'Thảm cỏ', icon: '🌱', category: 'nature',
+    description: 'Mảnh địa hình phủ cỏ.', science: 'Thảm thực vật giúp giữ đất và hấp thụ nước mưa.',
+    size: [2.4, .12, 2.4], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.55, 0, p.position[2] * 1.55] })), behavior: { kind: 'structure' },
+  },
+  'soil-tile': {
+    type: 'soil-tile', name: 'Đất', icon: '🟫', category: 'nature',
+    description: 'Mảnh nền đất để tạo địa hình.', science: 'Đất là hỗn hợp khoáng, hữu cơ, nước và không khí.',
+    size: [2.4, .12, 2.4], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.55, 0, p.position[2] * 1.55] })), behavior: { kind: 'structure' },
+  },
+  'water-tile': {
+    type: 'water-tile', name: 'Hồ nước', icon: '🌊', category: 'nature',
+    description: 'Mảnh mặt nước để tạo hồ.', science: 'Mặt nước phản xạ ánh sáng và tạo môi trường sống thủy sinh.',
+    size: [2.4, .08, 2.4], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.55, 0, p.position[2] * 1.55] })), behavior: { kind: 'structure' },
+  },
+  'river-tile': {
+    type: 'river-tile', name: 'Đoạn sông', icon: '🏞️', category: 'nature',
+    description: 'Mảnh sông để ghép thành dòng nước dài.', science: 'Sông dẫn nước từ nơi cao về nơi thấp theo địa hình.',
+    size: [2.4, .08, 2.4], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.55] })), behavior: { kind: 'structure' },
+  },
+  hill: {
+    type: 'hill', name: 'Đồi', icon: '⛰️', category: 'nature',
+    description: 'Mô-đun đồi thấp.', science: 'Đồi là dạng địa hình nhô cao với sườn thoải hơn núi.',
+    size: [2.1, 1.15, 2.1], ports: [], behavior: { kind: 'structure' },
+  },
+  mountain: {
+    type: 'mountain', name: 'Núi', icon: '🏔️', category: 'nature',
+    description: 'Mô-đun núi cao.', science: 'Núi hình thành do vận động kiến tạo, núi lửa hoặc xói mòn lâu dài.',
+    size: [2.4, 2.4, 2.4], ports: [], behavior: { kind: 'structure' },
+  },
+  tree: {
+    type: 'tree', name: 'Cây', icon: '🌳', category: 'nature',
+    description: 'Cây xanh cho cảnh quan.', science: 'Cây quang hợp, hấp thụ CO₂ và giải phóng oxy.',
+    size: [1.0, 2.0, 1.0], ports: [], behavior: { kind: 'structure' },
+  },
+  cloud: {
+    type: 'cloud', name: 'Mây', icon: '☁️', category: 'nature',
+    description: 'Mây trang trí bầu trời.', science: 'Mây gồm các giọt nước hoặc tinh thể băng rất nhỏ lơ lửng trong khí quyển.',
+    size: [1.8, .9, 1.1], ports: [], behavior: { kind: 'structure' },
+  },
+  rock: {
+    type: 'rock', name: 'Tảng đá', icon: '🪨', category: 'nature',
+    description: 'Đá để tạo địa hình.', science: 'Đá là vật liệu tự nhiên cấu tạo từ một hay nhiều khoáng vật.',
+    size: [1.1, .8, 1.0], ports: [], behavior: { kind: 'structure' },
+  },
+
   chassis: {
     type: 'chassis', name: 'Khung máy', icon: '▰', category: 'structure',
     description: 'Nền cơ khí để bố trí các bộ phận.', science: 'Kết cấu chịu tải và giữ hình học của máy.',
@@ -167,8 +342,11 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
 export const PALETTE: ModuleType[] = [
   'battery', 'solar', 'hand-crank',
   'switch', 'sensor',
-  'motor', 'shaft', 'bearing', 'gear-small', 'gear-large', 'belt-drive', 'cam',
+  'motor', 'shaft', 'bearing', 'gear-small', 'gear-large', 'belt-drive', 'cam', 'axle', 'differential', 'gearbox',
   'wheel', 'fan', 'propeller', 'drill', 'piston', 'conveyor', 'winch', 'mixer', 'lamp', 'led', 'buzzer',
   'water-tank', 'pipe', 'valve', 'pump', 'nozzle',
-  'chassis',
+  'car-base', 'motorcycle-base', 'train-engine', 'train-wagon',
+  'road-straight', 'road-curve', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge',
+  'foundation', 'wall', 'door-wall', 'window-wall', 'roof', 'column', 'fence', 'chassis',
+  'grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'hill', 'mountain', 'tree', 'cloud', 'rock',
 ];
