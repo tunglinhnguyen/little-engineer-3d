@@ -9,7 +9,9 @@ export class SimulationEngine {
     const powered = new Set<string>();
     const rpm = new Map<string, number>();
     const active = new Set<string>();
+    const fluid = new Set<string>();
 
+    // 1) Electrical network.
     const powerQueue: string[] = [];
     for (const module of this.graph.modules.values()) {
       if (MODULES[module.type].behavior.kind === 'source') {
@@ -32,6 +34,7 @@ export class SimulationEngine {
       }
     }
 
+    // 2) Mechanical rotation network.
     const rotationQueue: { id: string; rpm: number }[] = [];
     for (const module of this.graph.modules.values()) {
       const behavior = MODULES[module.type].behavior;
@@ -40,8 +43,7 @@ export class SimulationEngine {
         rpm.set(module.id, speed);
         active.add(module.id);
         rotationQueue.push({ id: module.id, rpm: speed });
-      }
-      if (behavior.kind === 'rotation-source') {
+      } else if (behavior.kind === 'rotation-source') {
         const speed = behavior.rpm ?? 45;
         rpm.set(module.id, speed);
         active.add(module.id);
@@ -62,29 +64,64 @@ export class SimulationEngine {
         const behavior = MODULES[next.type].behavior;
         let nextRpm = current.rpm;
 
-        // Two meshing gears rotate in opposite directions. Their speed ratio is
-        // driver-teeth / driven-teeth. Other shaft-like links preserve RPM.
         if (currentBehavior.kind === 'gear' && behavior.kind === 'gear') {
           const driverTeeth = currentBehavior.teeth ?? 1;
           const drivenTeeth = behavior.teeth ?? 1;
           nextRpm = -current.rpm * driverTeeth / drivenTeeth;
+        } else if (behavior.kind === 'transmission') {
+          nextRpm = current.rpm * (behavior.ratio ?? 1);
         }
 
         const mag = Math.abs(nextRpm);
         if ((bestMagnitude.get(next.id) ?? -1) >= mag) continue;
+
         bestMagnitude.set(next.id, mag);
         rpm.set(next.id, nextRpm);
         active.add(next.id);
 
         if (
           behavior.kind === 'pass-rotation' ||
-          behavior.kind === 'gear'
+          behavior.kind === 'gear' ||
+          behavior.kind === 'transmission'
         ) {
           rotationQueue.push({ id: next.id, rpm: nextRpm });
         }
       }
     }
 
-    return { powered, rpm, active };
+    // 3) Fluid network. A pump only passes water when the same pump is rotating.
+    const fluidQueue: string[] = [];
+    for (const module of this.graph.modules.values()) {
+      if (MODULES[module.type].behavior.kind === 'fluid-source') {
+        fluid.add(module.id);
+        active.add(module.id);
+        fluidQueue.push(module.id);
+      }
+    }
+
+    while (fluidQueue.length) {
+      const id = fluidQueue.shift()!;
+      for (const edge of this.graph.outgoing(id, 'fluid')) {
+        const next = this.graph.modules.get(edge.toModuleId);
+        if (!next || fluid.has(next.id)) continue;
+        const behavior = MODULES[next.type].behavior;
+
+        if (behavior.kind === 'fluid-valve' && next.switchOn === false) continue;
+        if (behavior.kind === 'pump' && !rpm.has(next.id)) continue;
+
+        fluid.add(next.id);
+        active.add(next.id);
+
+        if (
+          behavior.kind === 'fluid-pass' ||
+          behavior.kind === 'fluid-valve' ||
+          behavior.kind === 'pump'
+        ) {
+          fluidQueue.push(next.id);
+        }
+      }
+    }
+
+    return { powered, rpm, active, fluid };
   }
 }
