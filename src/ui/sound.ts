@@ -5,6 +5,7 @@ type Voice = {
   gain: GainNode;
   noise?: AudioBufferSourceNode;
   filter?: BiquadFilterNode;
+  pan?: StereoPannerNode;
 };
 
 const SOUND_TYPES = new Set<ModuleType>([
@@ -66,8 +67,9 @@ export class SoundEngine {
       const existing = this.voices.get(id);
       if (existing) {
         this.tune(existing, module.type, speed);
+        this.pan(existing, module);
       } else {
-        this.voices.set(id, this.createVoice(module.type, speed));
+        this.voices.set(id, this.createVoice(module, speed));
       }
     }
   }
@@ -77,11 +79,14 @@ export class SoundEngine {
     this.voices.clear();
   }
 
-  private createVoice(type: ModuleType, rpm: number): Voice {
+  private createVoice(module: ModuleInstance, rpm: number): Voice {
     const ctx = this.context!;
+    const type = module.type;
     const gain = ctx.createGain();
+    const pan = ctx.createStereoPanner();
     gain.gain.value = this.volumeFor(type);
-    gain.connect(this.master!);
+    gain.connect(pan);
+    pan.connect(this.master!);
 
     if (type === 'fan' || type === 'propeller' || type === 'pump' || type === 'nozzle') {
       const length = Math.max(1, Math.floor(ctx.sampleRate * 1.2));
@@ -97,7 +102,9 @@ export class SoundEngine {
       noise.connect(filter);
       filter.connect(gain);
       noise.start();
-      return { gain, noise, filter };
+      const voice = { gain, noise, filter, pan };
+      this.pan(voice, module);
+      return voice;
     }
 
     const oscillator = ctx.createOscillator();
@@ -108,8 +115,9 @@ export class SoundEngine {
       'sine';
     oscillator.connect(gain);
     oscillator.start();
-    const voice = { gain, oscillator };
+    const voice = { gain, oscillator, pan };
     this.tune(voice, type, rpm);
+    this.pan(voice, module);
     return voice;
   }
 
@@ -136,6 +144,12 @@ export class SoundEngine {
     voice.oscillator.frequency.setTargetAtTime(frequency, now, .04);
   }
 
+  private pan(voice: Voice, module: ModuleInstance) {
+    if (!voice.pan || !this.context) return;
+    const value = Math.max(-1, Math.min(1, module.position[0] / 12));
+    voice.pan.pan.setTargetAtTime(value, this.context.currentTime, .08);
+  }
+
   private volumeFor(type: ModuleType) {
     if (type === 'buzzer') return .11;
     if (type === 'drill') return .06;
@@ -154,5 +168,6 @@ export class SoundEngine {
     try { voice.noise?.disconnect(); } catch {}
     try { voice.filter?.disconnect(); } catch {}
     try { voice.gain.disconnect(); } catch {}
+    try { voice.pan?.disconnect(); } catch {}
   }
 }
