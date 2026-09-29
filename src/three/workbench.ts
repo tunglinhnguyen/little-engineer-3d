@@ -27,6 +27,9 @@ export class Workbench {
   private dragModuleId: string | null = null;
   private dragStart = new THREE.Vector2(); private dragOrigin = new THREE.Vector3();
   private dragConnections: Connection[] = [];
+  private lastTapId: string | null = null;
+  private lastTapAt = 0;
+  private lastTapPoint = new THREE.Vector2();
   private last = performance.now(); private running = false; private rpm = new Map<string, number>(); private active = new Set<string>();
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
@@ -102,7 +105,10 @@ export class Workbench {
       const hits = this.cast(e, [...this.objects.values()]); const root = hits[0]?.object.userData.moduleRoot as THREE.Group | undefined;
       if (!root) { this.select(null); return; }
       this.select(root.userData.moduleId);
-      if (!this.hooks.canEdit()) return;
+      if (!this.hooks.canEdit()) {
+        this.registerTap(root.userData.moduleId, e);
+        return;
+      }
       const point = new THREE.Vector3();
       if (!this.ray.ray.intersectPlane(this.dragPlane, point)) return;
       this.dragPointerId = e.pointerId; this.dragModuleId = root.userData.moduleId;
@@ -120,9 +126,31 @@ export class Workbench {
       }
       const o = this.objects.get(this.dragModuleId)!; point.add(this.dragOffset); o.position.set(Math.round(point.x * 4) / 4, .65, Math.round(point.z * 4) / 4); const m = this.graph.modules.get(this.dragModuleId)!; m.position = [o.position.x, o.position.y, o.position.z];
     });
-    this.canvas.addEventListener('pointerup', e => { if (e.pointerId === this.dragPointerId) this.finishDrag(false); });
+    this.canvas.addEventListener('pointerup', e => {
+      if (e.pointerId !== this.dragPointerId) return;
+      const id = this.dragModuleId;
+      const wasDragging = this.dragging;
+      this.finishDrag(false);
+      if (!wasDragging && id) this.registerTap(id, e);
+    });
     this.canvas.addEventListener('pointercancel', e => { if (e.pointerId === this.dragPointerId) this.finishDrag(true); });
     this.canvas.addEventListener('lostpointercapture', e => { if (e.pointerId === this.dragPointerId) this.finishDrag(true); });
+  }
+
+  private registerTap(id: string, e: PointerEvent) {
+    const now = performance.now();
+    const point = new THREE.Vector2(e.clientX, e.clientY);
+    const isDouble = this.lastTapId === id && now - this.lastTapAt < 380 && point.distanceTo(this.lastTapPoint) < 28;
+    this.lastTapId = id;
+    this.lastTapAt = now;
+    this.lastTapPoint.copy(point);
+    if (!isDouble) return;
+    this.lastTapId = null;
+    const module = this.graph.modules.get(id);
+    if (module?.type === 'switch') {
+      this.select(id);
+      this.toggleSwitch();
+    }
   }
 
   private finishDrag(cancelled: boolean) {
@@ -151,7 +179,30 @@ export class Workbench {
   private loop(now: number) {
     requestAnimationFrame(t => this.loop(t)); const dt = Math.min(.04, (now - this.last) / 1000); this.last = now;
     if (this.running) for (const [id, speed] of this.rpm) { const o = this.objects.get(id); if (!o) continue; let rotor: THREE.Object3D | undefined; o.traverse(child => { if (!rotor && child.userData.rotor) rotor = child; }); const angle = speed / 60 * Math.PI * 2 * dt; if (rotor) rotor.rotation.x += angle; else o.rotation.x += 0; }
-    for (const [id, o] of this.objects) { const m = this.graph.modules.get(id); if (!m || m.type !== 'lamp') continue; let bulb: THREE.Mesh | undefined; o.traverse(child => { if (!bulb && child.userData.lampBulb && (child as THREE.Mesh).isMesh) bulb = child as THREE.Mesh; }); if (bulb?.material instanceof THREE.MeshStandardMaterial) { const on = this.running && this.active.has(id); bulb.material.emissive.setHex(on ? 0xffc928 : 0x000000); bulb.material.emissiveIntensity = on ? 2.8 : 0; } }
+    for (const [id, o] of this.objects) {
+      const m = this.graph.modules.get(id);
+      if (!m || (m.type !== 'lamp' && m.type !== 'led')) continue;
+      let bulb: THREE.Mesh | undefined;
+      o.traverse(child => {
+        if (!bulb && child.userData.lampBulb && (child as THREE.Mesh).isMesh) bulb = child as THREE.Mesh;
+      });
+      if (bulb?.material instanceof THREE.MeshStandardMaterial) {
+        const on = this.running && this.active.has(id);
+        bulb.material.emissive.setHex(on ? (m.type === 'led' ? 0x35ff73 : 0xffc928) : 0x000000);
+        bulb.material.emissiveIntensity = on ? 2.8 : 0;
+      }
+    }
+    for (const [id, o] of this.objects) {
+      const m = this.graph.modules.get(id);
+      if (!m || m.type !== 'buzzer') continue;
+      let cap: THREE.Object3D | undefined;
+      o.traverse(child => { if (!cap && child.userData.buzzerCap) cap = child; });
+      if (cap) {
+        const on = this.running && this.active.has(id);
+        const pulse = on ? 1 + Math.sin(now * .045) * .06 : 1;
+        cap.scale.set(pulse, 1, pulse);
+      }
+    }
     this.controls.update(); this.renderer.render(this.scene, this.camera);
   }
 }
