@@ -681,6 +681,305 @@ cameraLockBtn.onclick = () => {
   showToast(locked ? '🔒 Đã khóa góc nhìn' : '🔓 Có thể xoay và zoom góc nhìn');
 };
 
+const toolDrawer = document.querySelector<HTMLElement>('#toolDrawer')!;
+const toolboxBtn = document.querySelector<HTMLButtonElement>('#toolboxBtn')!;
+const closeToolsBtn = document.querySelector<HTMLButtonElement>('#closeTools')!;
+toolboxBtn.onclick = () => toolDrawer.classList.toggle('hidden-by-user');
+closeToolsBtn.onclick = () => toolDrawer.classList.add('hidden-by-user');
+
+document.querySelectorAll<HTMLButtonElement>('[data-tool-tab]').forEach(button => {
+  button.onclick = () => {
+    document.querySelectorAll('[data-tool-tab]').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll<HTMLElement>('[data-tool-page]').forEach(x => x.classList.add('hidden'));
+    button.classList.add('active');
+    document.querySelector<HTMLElement>('[data-tool-page="' + button.dataset.toolTab + '"]')?.classList.remove('hidden');
+    if (button.dataset.toolTab === 'projects') renderProjectList();
+    if (button.dataset.toolTab === 'profile') renderProfile();
+  };
+});
+
+function renderBlueprintList() {
+  const host = document.querySelector<HTMLElement>('#blueprintList')!;
+  host.innerHTML = '';
+  for (const blueprint of BLUEPRINTS) {
+    const button = document.createElement('button');
+    button.className = 'blueprint-card';
+    button.innerHTML = '<span>' + blueprint.icon + '</span><div><b>' + blueprint.title + '</b><small>' + blueprint.description + '</small></div>';
+    button.onclick = () => {
+      if (mode === 'run') setMode('build');
+      const selected = workbench.selectedId ? graph.modules.get(workbench.selectedId) : undefined;
+      const origin: [number,number,number] = selected
+        ? [selected.position[0] + 4.5, .65, selected.position[2]]
+        : [0,.65,0];
+      const built = instantiateBlueprint(blueprint,origin);
+      for (const module of built.modules) graph.addModule(module);
+      for (const connection of built.connections) graph.connect(connection);
+      workbench.rebuildFromGraph();
+      recordHistory();
+      saveQuietly();
+      updateProgress();
+      workbench.focusAll();
+      showToast('📐 Đã dựng blueprint ' + blueprint.title);
+      speak('Blueprint ' + blueprint.title + ' đã được đặt. Con có thể tháo, đổi hoặc mở rộng nó.');
+    };
+    host.appendChild(button);
+  }
+}
+renderBlueprintList();
+
+function renderTutorialList() {
+  const host = document.querySelector<HTMLElement>('#tutorialList')!;
+  host.innerHTML = '';
+  for (const tutorial of TUTORIALS) {
+    const b = document.createElement('button');
+    b.className = 'tutorial-card' + (tutorial.id === activeTutorialId ? ' active' : '');
+    b.innerHTML = '<span>' + tutorial.icon + '</span><div><b>' + tutorial.title + '</b><small>' + tutorial.steps.length + ' bước</small></div>';
+    b.onclick = () => {
+      activeTutorialId = activeTutorialId === tutorial.id ? null : tutorial.id;
+      if (activeTutorialId) localStorage.setItem('le3d-tutorial',activeTutorialId);
+      else localStorage.removeItem('le3d-tutorial');
+      renderTutorialList();
+      renderTutorialProgress();
+      updateMissionHint();
+      if (activeTutorialId) speak('Bắt đầu hướng dẫn ' + tutorial.title + '.');
+    };
+    host.appendChild(b);
+  }
+}
+
+function renderTutorialProgress(state = simulator.evaluate()) {
+  const host = document.querySelector<HTMLElement>('#tutorialProgress');
+  if (!host) return;
+  const tutorial = TUTORIALS.find(t => t.id === activeTutorialId);
+  if (!tutorial) {
+    host.innerHTML = '<p>Chọn một hướng dẫn. Game sẽ kiểm tra từng bước theo chính công trình của con.</p>';
+    return;
+  }
+  const progress = tutorialProgress(tutorial,graph,state);
+  host.innerHTML =
+    '<div class="tutorial-meter"><span style="width:' + progress.percent + '%"></span></div>' +
+    '<b>' + progress.completed + ' / ' + progress.total + ' bước</b>' +
+    '<p>' + progress.summary + '</p>' +
+    (progress.focusName ? '<small>Tiếp theo: ' + progress.focusName + '</small>' : '');
+}
+renderTutorialList();
+renderTutorialProgress();
+
+function renderProfile() {
+  const host = document.querySelector<HTMLElement>('#profileSummary');
+  if (!host) return;
+  const profile = progressStore.load();
+  const achievements = ACHIEVEMENTS.map(a => {
+    const unlocked = Boolean(profile.achievements[a.id]);
+    return '<div class="achievement ' + (unlocked ? 'unlocked' : '') + '"><span>' + a.icon + '</span><div><b>' + a.title + '</b><small>' + a.description + '</small></div><em>' + (unlocked ? '✓' : '○') + '</em></div>';
+  }).join('');
+  const concepts = Object.entries(profile.concepts)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,8)
+    .map(([name,value]) => '<span class="concept-chip">' + name + ' · ' + value + '</span>')
+    .join('');
+  host.innerHTML =
+    '<div class="profile-stats"><div><b>' + profile.missionsCompleted.length + '</b><small>Nhiệm vụ</small></div>' +
+    '<div><b>' + profile.buildsSaved + '</b><small>Công trình</small></div>' +
+    '<div><b>' + Object.keys(profile.achievements).length + '</b><small>Huy hiệu</small></div></div>' +
+    '<div class="concept-list">' + concepts + '</div><div class="achievement-list">' + achievements + '</div>';
+}
+renderProfile();
+
+function renderProjectList() {
+  const host = document.querySelector<HTMLElement>('#projectList')!;
+  const projects = projectStore.list();
+  host.innerHTML = projects.length ? '' : '<p class="project-empty">Chưa có dự án đã lưu.</p>';
+  for (const project of projects) {
+    const card = document.createElement('div');
+    card.className = 'project-card' + (project.id === projectStore.activeId() ? ' active' : '');
+    const date = new Date(project.updatedAt).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    card.innerHTML =
+      (project.thumbnail ? '<img src="' + project.thumbnail + '" alt="" />' : '<div class="project-thumb">🏗️</div>') +
+      '<div class="project-info"><b>' + project.name + '</b><small>' + date + ' · ' + project.graph.modules.length + ' mô-đun</small></div>' +
+      '<div class="project-actions"><button data-action="load">Mở</button><button data-action="copy">Bản sao</button><button data-action="delete">Xóa</button></div>';
+    card.querySelector<HTMLButtonElement>('[data-action="load"]')!.onclick = () => {
+      const loaded = projectStore.load(project.id);
+      if (!loaded) return;
+      if (mode === 'run') setMode('build');
+      graph.restore(loaded.graph);
+      workbench.rebuildFromGraph();
+      history = [JSON.stringify(graph.serialize())];
+      historyIndex = 0;
+      localStorage.setItem('le3d-project-name',loaded.name);
+      (document.querySelector<HTMLInputElement>('#projectName')!).value = loaded.name;
+      saveQuietly();
+      updateHistoryButtons();
+      updateMissionHint();
+      workbench.focusAll();
+      renderProjectList();
+      showToast('📂 Đã mở ' + loaded.name);
+    };
+    card.querySelector<HTMLButtonElement>('[data-action="copy"]')!.onclick = () => {
+      const copy = projectStore.duplicate(project.id);
+      if (copy) { showToast('📑 Đã tạo bản sao'); renderProjectList(); }
+    };
+    card.querySelector<HTMLButtonElement>('[data-action="delete"]')!.onclick = () => {
+      projectStore.remove(project.id);
+      renderProjectList();
+    };
+    host.appendChild(card);
+  }
+}
+
+const projectNameInput = document.querySelector<HTMLInputElement>('#projectName')!;
+projectNameInput.value = localStorage.getItem('le3d-project-name') ?? projectNameInput.value;
+document.querySelector<HTMLButtonElement>('#saveProjectBtn')!.onclick = () => {
+  const name = projectNameInput.value.trim() || 'Công trình của con';
+  localStorage.setItem('le3d-project-name',name);
+  let thumbnail: string | undefined;
+  try { thumbnail = canvas.toDataURL('image/jpeg',.55); } catch {}
+  projectStore.save(graph,name,localStorage.getItem('le3d-player-name') ?? 'Bé',undefined,thumbnail);
+  progressStore.buildSaved();
+  updateProgress();
+  renderProjectList();
+  showToast('💾 Đã lưu dự án ' + name);
+};
+
+document.querySelector<HTMLButtonElement>('#exportProjectBtn')!.onclick = async () => {
+  const active = projectStore.activeId();
+  if (!active) { showToast('Hãy lưu dự án trước'); return; }
+  const json = projectStore.export(active);
+  if (!json) return;
+  try {
+    await navigator.clipboard.writeText(json);
+    showToast('📤 Đã sao chép JSON dự án');
+  } catch {
+    prompt('Sao chép JSON dự án:',json);
+  }
+};
+
+document.querySelector<HTMLButtonElement>('#importProjectBtn')!.onclick = () => {
+  const json = prompt('Dán JSON dự án Little Engineer 3D:');
+  if (!json) return;
+  try {
+    const project = projectStore.import(json);
+    graph.restore(project.graph);
+    workbench.rebuildFromGraph();
+    history = [JSON.stringify(graph.serialize())];
+    historyIndex = 0;
+    saveQuietly();
+    renderProjectList();
+    workbench.focusAll();
+    showToast('📥 Đã nhập dự án');
+  } catch {
+    showToast('⚠️ JSON dự án không hợp lệ');
+  }
+};
+
+const sandboxBtn = document.querySelector<HTMLButtonElement>('#sandboxBtn')!;
+function syncSandbox() {
+  missionPanel.classList.toggle('sandbox-hidden',sandboxMode);
+  sandboxBtn.classList.toggle('active',sandboxMode);
+  sandboxBtn.textContent = sandboxMode ? '🧱 Sandbox ✓' : '🧱 Sandbox';
+  localStorage.setItem('le3d-sandbox',sandboxMode?'1':'0');
+  updateMissionHint();
+}
+sandboxBtn.onclick = () => { sandboxMode = !sandboxMode; syncSandbox(); };
+syncSandbox();
+
+const energyBtn = document.querySelector<HTMLButtonElement>('#energyBtn')!;
+const energyModes: typeof energyMode[] = ['off','all','power','rotation','fluid'];
+const energyLabels: Record<typeof energyMode,string> = {
+  off:'Tắt',all:'Tất cả',power:'Điện',rotation:'Mô-men',fluid:'Nước'
+};
+energyBtn.onclick = () => {
+  energyMode = energyModes[(energyModes.indexOf(energyMode)+1)%energyModes.length];
+  workbench.setEnergyView(energyMode,simulator.evaluate());
+  energyBtn.textContent = '✨ Dòng năng lượng: ' + energyLabels[energyMode];
+  energyBtn.classList.toggle('active',energyMode!=='off');
+};
+
+let xrayOn = false;
+const xrayBtn = document.querySelector<HTMLButtonElement>('#xrayBtn')!;
+xrayBtn.onclick = () => {
+  xrayOn=!xrayOn;
+  workbench.setXRaySelected(xrayOn);
+  xrayBtn.classList.toggle('active',xrayOn);
+  xrayBtn.textContent=xrayOn?'🩻 X-ray ✓':'🩻 X-ray';
+};
+
+let explodedOn = false;
+const explodeBtn = document.querySelector<HTMLButtonElement>('#explodeBtn')!;
+explodeBtn.onclick = () => {
+  explodedOn=!explodedOn;
+  workbench.setExplodedSelected(explodedOn);
+  explodeBtn.classList.toggle('active',explodedOn);
+  explodeBtn.textContent=explodedOn?'💥 Cấu tạo ✓':'💥 Xem cấu tạo';
+};
+
+let nightOn = false;
+const dayNightBtn = document.querySelector<HTMLButtonElement>('#dayNightBtn')!;
+dayNightBtn.onclick = () => {
+  nightOn=!nightOn;
+  workbench.setDayPhase(nightOn?'night':'day');
+  dayNightBtn.textContent=nightOn?'☀️ Ban ngày':'🌙 Ban đêm';
+  dayNightBtn.classList.toggle('active',nightOn);
+};
+
+let rainOn = false;
+const weatherBtn = document.querySelector<HTMLButtonElement>('#weatherBtn')!;
+weatherBtn.onclick = () => {
+  rainOn=!rainOn;
+  workbench.setWeather(rainOn?'rain':'clear');
+  weatherBtn.textContent=rainOn?'☀️ Trời quang':'🌧 Mưa';
+  weatherBtn.classList.toggle('active',rainOn);
+};
+
+let performanceOn = false;
+const performanceBtn = document.querySelector<HTMLButtonElement>('#performanceBtn')!;
+performanceBtn.onclick = () => {
+  performanceOn=!performanceOn;
+  workbench.setPerformanceMode(performanceOn);
+  performanceBtn.textContent=performanceOn?'⚡ iPad ✓':'⚡ Tối ưu iPad';
+  performanceBtn.classList.toggle('active',performanceOn);
+};
+
+const kidModeBtn=document.querySelector<HTMLButtonElement>('#kidModeBtn')!;
+const engineerModeBtn=document.querySelector<HTMLButtonElement>('#engineerModeBtn')!;
+function syncLearningMode(){
+  kidModeBtn.classList.toggle('active',!engineerMode);
+  engineerModeBtn.classList.toggle('active',engineerMode);
+  localStorage.setItem('le3d-engineer-mode',engineerMode?'1':'0');
+  renderInspector(workbench.selectedId);
+}
+kidModeBtn.onclick=()=>{engineerMode=false;syncLearningMode();};
+engineerModeBtn.onclick=()=>{engineerMode=true;syncLearningMode();};
+syncLearningMode();
+
+document.querySelector<HTMLButtonElement>('#createMakerBtn')!.onclick = () => {
+  if (mode === 'run') setMode('build');
+  const name = document.querySelector<HTMLInputElement>('#makerName')!.value.trim().slice(0,22) || 'Khối của con';
+  const signal = document.querySelector<HTMLSelectElement>('#makerSignal')!.value;
+  const type: ModuleType =
+    signal==='power'?'custom-power-block':
+    signal==='rotation'?'custom-rotation-block':
+    signal==='fluid'?'custom-fluid-block':'custom-block';
+  const color = Number.parseInt(document.querySelector<HTMLInputElement>('#makerColor')!.value.slice(1),16);
+  const shape = document.querySelector<HTMLSelectElement>('#makerShape')!.value as 'box'|'cylinder';
+  const size: [number,number,number] = [
+    Number(document.querySelector<HTMLInputElement>('#makerX')!.value),
+    Number(document.querySelector<HTMLInputElement>('#makerY')!.value),
+    Number(document.querySelector<HTMLInputElement>('#makerZ')!.value),
+  ];
+  const instance: ModuleInstance = {
+    id:type+'-'+crypto.randomUUID().slice(0,8),
+    type,
+    position:findFreePosition(type),
+    rotationY:0,
+    switchOn:type==='custom-power-block'?true:undefined,
+    custom:{name,color,shape,size},
+  };
+  workbench.addInstance(instance,workbench.selectedId);
+  showToast('🧩 Đã tạo ' + name);
+  speak('Con vừa tạo mô đun ' + name + '.');
+};
+
 const speechToggle = document.createElement('button');
 speechToggle.className = 'speech-toggle';
 speechToggle.textContent = '🗣️';
