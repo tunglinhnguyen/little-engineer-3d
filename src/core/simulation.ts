@@ -108,6 +108,7 @@ export class SimulationEngine {
 
         if (behavior.kind === 'fluid-valve' && next.switchOn === false) continue;
         if (behavior.kind === 'pump' && !rpm.has(next.id)) continue;
+        if (next.type === 'firetruck' && !rpm.has(next.id)) continue;
 
         fluid.add(next.id);
         active.add(next.id);
@@ -115,7 +116,8 @@ export class SimulationEngine {
         if (
           behavior.kind === 'fluid-pass' ||
           behavior.kind === 'fluid-valve' ||
-          behavior.kind === 'pump'
+          behavior.kind === 'pump' ||
+          next.type === 'firetruck'
         ) {
           fluidQueue.push(next.id);
         }
