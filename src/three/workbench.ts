@@ -139,8 +139,8 @@ export class Workbench {
   toggleSwitch() {
     if (!this.selectedId) return;
     const m = this.graph.modules.get(this.selectedId);
-    if (!m || (m.type !== 'switch' && m.type !== 'valve')) return;
-    m.switchOn = !(m.switchOn !== false);
+    if (!m || (m.type !== 'switch' && m.type !== 'valve' && m.type !== 'door')) return;
+    m.switchOn = m.type === 'door' ? m.switchOn !== true : !(m.switchOn !== false);
     const old = this.objects.get(m.id);
     if (old) this.root.remove(old);
     const next = createModuleObject(m);
@@ -233,7 +233,7 @@ export class Workbench {
     if (!isDouble) return;
     this.lastTapId = null;
     const module = this.graph.modules.get(id);
-    if (module?.type === 'switch' || module?.type === 'valve') {
+    if (module?.type === 'switch' || module?.type === 'valve' || module?.type === 'door') {
       this.select(id);
       this.toggleSwitch();
     }
@@ -318,7 +318,7 @@ export class Workbench {
       const m = this.graph.modules.get(id);
       if (!m) continue;
 
-      if (m.type === 'lamp' || m.type === 'led') {
+      if (m.type === 'lamp' || m.type === 'led' || m.type === 'streetlight') {
         let bulb: THREE.Mesh | undefined;
         o.traverse(child => {
           if (!bulb && child.userData.lampBulb && (child as THREE.Mesh).isMesh) bulb = child as THREE.Mesh;
@@ -328,6 +328,20 @@ export class Workbench {
           bulb.material.emissive.setHex(on ? (m.type === 'led' ? 0x35ff73 : 0xffc928) : 0x000000);
           bulb.material.emissiveIntensity = on ? 2.8 : 0;
         }
+      }
+
+      if (m.type === 'traffic-light') {
+        const on = this.running && this.active.has(id);
+        const phase = (now / 1000) % 10;
+        const activeIndex = phase < 4 ? 0 : phase < 5.5 ? 1 : 2;
+        o.traverse(child => {
+          if (!child.userData.trafficLamp || !(child as THREE.Mesh).isMesh) return;
+          const material = (child as THREE.Mesh).material;
+          if (!(material instanceof THREE.MeshStandardMaterial)) return;
+          const lit = on && child.userData.trafficIndex === activeIndex;
+          material.emissive.copy(lit ? material.color : new THREE.Color(0x000000));
+          material.emissiveIntensity = lit ? 2.4 : 0;
+        });
       }
 
       if (m.type === 'buzzer') {
