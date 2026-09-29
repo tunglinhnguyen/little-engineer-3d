@@ -197,9 +197,15 @@ function renderInspector(id: string | null) {
   const toggleLabel = m.type === 'valve'
     ? (m.switchOn === false ? '🟢 Mở van' : '🔴 Đóng van')
     : (m.switchOn === false ? '🟢 Bật công tắc' : '🔴 Tắt công tắc');
-  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${isToggle ? `<button id="toggleSwitch">${toggleLabel}</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
+  const canElevate = d.category === 'building' || d.category === 'nature' || d.category === 'transport' || d.category === 'structure';
+  const elevationButtons = canElevate ? '<div class="elevation-row"><button id="lowerPart" ' + disabled + '>⬇ Hạ</button><button id="raisePart" ' + disabled + '>⬆ Nâng</button></div>' : '';
+  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${elevationButtons}${isToggle ? `<button id="toggleSwitch">${toggleLabel}</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
   document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected();
   document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => workbench.removeSelected();
+  const lower = document.querySelector<HTMLButtonElement>('#lowerPart');
+  const raise = document.querySelector<HTMLButtonElement>('#raisePart');
+  if (lower) lower.onclick = () => workbench.elevateSelected(-.5);
+  if (raise) raise.onclick = () => workbench.elevateSelected(.5);
   const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch');
   if (sw) sw.onclick = () => {
     workbench.toggleSwitch();
