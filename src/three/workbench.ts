@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MODULES } from '../core/moduleRegistry';
 import { ConnectionGraph } from '../core/connectionGraph';
+import { buildVehicleRoute, routeKindForVehicle } from '../core/worldRoutes';
 import type { Connection, ModuleInstance } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
 
@@ -36,6 +37,7 @@ export class Workbench {
   private active = new Set<string>();
   private fluid = new Set<string>();
   private labSign: THREE.Sprite | null = null;
+  private vehicleTravel = new Map<string, number>();
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
@@ -140,6 +142,7 @@ export class Workbench {
     this.rpm = rpm;
     this.active = active;
     this.fluid = fluid;
+    if (!running) this.vehicleTravel.clear();
   }
 
   cancelInteraction() { this.finishDrag(true); }
@@ -172,6 +175,7 @@ export class Workbench {
         this.registerTap(root.userData.moduleId, e);
         return;
       }
+      this.dragPlane.constant = -root.position.y;
       const point = new THREE.Vector3();
       if (!this.ray.ray.intersectPlane(this.dragPlane, point)) return;
       this.dragPointerId = e.pointerId; this.dragModuleId = root.userData.moduleId;
@@ -187,7 +191,11 @@ export class Workbench {
         this.dragConnections = [...this.graph.incoming(this.dragModuleId), ...this.graph.outgoing(this.dragModuleId)];
         this.graph.disconnectModule(this.dragModuleId); this.dragging = true; this.refreshPorts();
       }
-      const o = this.objects.get(this.dragModuleId)!; point.add(this.dragOffset); o.position.set(Math.round(point.x * 4) / 4, .65, Math.round(point.z * 4) / 4); const m = this.graph.modules.get(this.dragModuleId)!; m.position = [o.position.x, o.position.y, o.position.z];
+      const o = this.objects.get(this.dragModuleId)!;
+      point.add(this.dragOffset);
+      o.position.set(Math.round(point.x * 4) / 4, this.dragOrigin.y, Math.round(point.z * 4) / 4);
+      const m = this.graph.modules.get(this.dragModuleId)!;
+      m.position = [o.position.x, o.position.y, o.position.z];
     });
     this.canvas.addEventListener('pointerup', e => {
       if (e.pointerId !== this.dragPointerId) return;
@@ -421,61 +429,127 @@ export class Workbench {
       }
     }
 
-    // Vehicle travel preview: move the whole connected machine together so
-    // batteries/motors/gearboxes do not visually detach from the vehicle.
+    // Vehicle motion uses real world infrastructure. Road vehicles and trains
+    // follow connected road/rail pieces; airplanes follow runways. The entire
+    // connected drivetrain moves and turns as one assembly.
     for (const [id, object] of this.objects) {
       const model = this.graph.modules.get(id);
-      if (model) object.position.set(...model.position);
+      if (!model) continue;
+      object.position.set(...model.position);
+      object.rotation.y = model.rotationY;
     }
+
     if (this.running) {
       const modules = [...this.graph.modules.values()];
-      const hasRoad = modules.some(m => m.type === 'road-straight' || m.type === 'road-curve' || m.type === 'bridge');
-      const hasRail = modules.some(m => m.type === 'rail-straight' || m.type === 'rail-curve' || m.type === 'rail-crossing');
-      const hasWater = modules.some(m => m.type === 'water-tile' || m.type === 'river-tile' || m.type === 'sea-tile');
-      const hasRunway = modules.some(m => m.type === 'runway');
-      const hasHelipad = modules.some(m => m.type === 'helipad');
+      const waterSurfaces = modules.filter(m => m.type === 'water-tile' || m.type === 'river-tile' || m.type === 'sea-tile');
+      const helipads = modules.filter(m => m.type === 'helipad');
       const moved = new Set<string>();
 
-      for (const [vehicleId, speed] of this.rpm) {
+      const placeAssembly = (
+        vehicleId: string,
+        target: THREE.Vector3,
+        yaw: number,
+        extraY = 0,
+      ) => {
         const vehicle = this.graph.modules.get(vehicleId);
-        if (!vehicle || MODULES[vehicle.type].behavior.kind !== 'vehicle') continue;
-
-        const needsRoad = vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base' || vehicle.type === 'firetruck';
-        if ((vehicle.type === 'train-engine' && !hasRail) ||
-            (needsRoad && !hasRoad) ||
-            (vehicle.type === 'boat' && !hasWater) ||
-            (vehicle.type === 'airplane' && !hasRunway) ||
-            (vehicle.type === 'helicopter' && !hasHelipad)) continue;
-
+        if (!vehicle) return;
         const component = this.connectedComponent(vehicleId);
-        const travelSpeed = MODULES[vehicle.type].behavior.vehicleSpeed ?? 1;
-        const phase = now * .00075 * travelSpeed * Math.max(.55, Math.abs(speed) / 90);
-        let distance = Math.sin(phase) * 1.35;
-        let dy = 0;
-
-        if (vehicle.type === 'airplane') {
-          distance = Math.sin(phase) * 2.4;
-          dy = Math.max(0, Math.sin(phase - .45)) * 1.45;
-        } else if (vehicle.type === 'helicopter') {
-          distance = Math.sin(phase * .65) * .9;
-          dy = .72 + Math.sin(phase * 1.8) * .12;
-        } else if (vehicle.type === 'boat') {
-          distance = Math.sin(phase) * 1.7;
-          dy = Math.sin(phase * 3) * .045;
-        } else if (vehicle.type === 'crane' || vehicle.type === 'excavator' || vehicle.type === 'bulldozer') {
-          distance = Math.sin(phase * .55) * .55;
-        }
-
-        const dx = Math.cos(vehicle.rotationY) * distance;
-        const dz = -Math.sin(vehicle.rotationY) * distance;
+        const base = new THREE.Vector3(...vehicle.position);
+        const deltaYaw = yaw - vehicle.rotationY;
+        const rotation = new THREE.Matrix4().makeRotationY(deltaYaw);
 
         for (const partId of component) {
           if (moved.has(partId)) continue;
           const model = this.graph.modules.get(partId);
           const part = this.objects.get(partId);
           if (!model || !part) continue;
-          part.position.set(model.position[0] + dx, model.position[1] + dy, model.position[2] + dz);
+          const offset = new THREE.Vector3(...model.position).sub(base).applyMatrix4(rotation);
+          part.position.copy(target).add(offset);
+          part.position.y += extraY;
+          part.rotation.y = model.rotationY + deltaYaw;
           moved.add(partId);
+        }
+      };
+
+      for (const [vehicleId, speed] of this.rpm) {
+        const vehicle = this.graph.modules.get(vehicleId);
+        if (!vehicle || MODULES[vehicle.type].behavior.kind !== 'vehicle') continue;
+
+        const travelSpeed = MODULES[vehicle.type].behavior.vehicleSpeed ?? 1;
+        const routeKind = routeKindForVehicle(vehicle.type);
+        const route = routeKind ? buildVehicleRoute(this.graph, vehicleId) : [];
+
+        if (route.length >= 2) {
+          const curve = new THREE.CatmullRomCurve3(
+            route.map(p => new THREE.Vector3(...p)),
+            false,
+            'centripetal',
+            .5,
+          );
+          const length = Math.max(1, curve.getLength());
+          const unitsPerSecond = travelSpeed * (.65 + Math.abs(speed) / 120 * 1.25);
+          const progress = (this.vehicleTravel.get(vehicleId) ?? 0) + unitsPerSecond * dt / length;
+          this.vehicleTravel.set(vehicleId, progress);
+
+          const cycle = progress % 2;
+          const reversing = cycle > 1;
+          const t = reversing ? 2 - cycle : cycle;
+          const target = curve.getPointAt(THREE.MathUtils.clamp(t, 0, 1));
+          const tangent = curve.getTangentAt(THREE.MathUtils.clamp(t, .001, .999));
+          if (reversing) tangent.multiplyScalar(-1);
+          const yaw = Math.atan2(-tangent.z, tangent.x);
+          const lift = vehicle.type === 'airplane' ? Math.sin(Math.PI * t) ** 2 * 1.7 : 0;
+          placeAssembly(vehicleId, target, yaw, lift);
+          continue;
+        }
+
+        const base = new THREE.Vector3(...vehicle.position);
+        const phase = now * .00075 * travelSpeed * Math.max(.55, Math.abs(speed) / 90);
+
+        if (vehicle.type === 'helicopter' && helipads.length) {
+          const pad = helipads.reduce((best, candidate) => {
+            const bd = Math.hypot(best.position[0] - vehicle.position[0], best.position[2] - vehicle.position[2]);
+            const cd = Math.hypot(candidate.position[0] - vehicle.position[0], candidate.position[2] - vehicle.position[2]);
+            return cd < bd ? candidate : best;
+          });
+          const target = new THREE.Vector3(
+            pad.position[0] + Math.cos(phase * .65) * .45,
+            pad.position[1],
+            pad.position[2] + Math.sin(phase * .65) * .45,
+          );
+          placeAssembly(vehicleId, target, vehicle.rotationY + Math.sin(phase * .35) * .2, 1.0 + Math.sin(phase * 1.8) * .1);
+          continue;
+        }
+
+        if (vehicle.type === 'boat' && waterSurfaces.length) {
+          const water = waterSurfaces.reduce((best, candidate) => {
+            const bd = Math.hypot(best.position[0] - vehicle.position[0], best.position[2] - vehicle.position[2]);
+            const cd = Math.hypot(candidate.position[0] - vehicle.position[0], candidate.position[2] - vehicle.position[2]);
+            return cd < bd ? candidate : best;
+          });
+          const rx = Math.max(.7, MODULES[water.type].size[0] * .36);
+          const rz = Math.max(.7, MODULES[water.type].size[2] * .36);
+          const target = new THREE.Vector3(
+            water.position[0] + Math.cos(phase) * rx,
+            vehicle.position[1],
+            water.position[2] + Math.sin(phase) * rz,
+          );
+          const tangent = new THREE.Vector3(-Math.sin(phase) * rx, 0, Math.cos(phase) * rz).normalize();
+          const yaw = Math.atan2(-tangent.z, tangent.x);
+          placeAssembly(vehicleId, target, yaw, Math.sin(phase * 3) * .04);
+          continue;
+        }
+
+        // Construction vehicles can still demonstrate drive and working
+        // mechanisms when there is no dedicated road network.
+        if (vehicle.type === 'crane' || vehicle.type === 'excavator' || vehicle.type === 'bulldozer') {
+          const distance = Math.sin(phase * .55) * .55;
+          const target = base.clone().add(new THREE.Vector3(
+            Math.cos(vehicle.rotationY) * distance,
+            0,
+            -Math.sin(vehicle.rotationY) * distance,
+          ));
+          placeAssembly(vehicleId, target, vehicle.rotationY);
         }
       }
     }
