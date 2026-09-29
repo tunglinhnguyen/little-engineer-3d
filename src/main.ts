@@ -29,7 +29,7 @@ app.innerHTML = `
     </div>
   </section>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.7.0</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v1.0.0</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
@@ -1193,7 +1193,7 @@ if (
 ) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-8', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260930-10', {
         scope: './',
         updateViaCache: 'none',
       });
