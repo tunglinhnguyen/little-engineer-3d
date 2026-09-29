@@ -103,7 +103,18 @@ describe('mission feedback', () => {
   });
   it('does not award success just because unrelated modules are active', () => {
     const { graph } = setupLamp();
-    const state = { active: new Set(['spare-battery', 'spare-lamp']), powered: new Set<string>(), rpm: new Map<string, number>(), fluid: new Set<string>() };
+    const state = {
+      active: new Set(['spare-battery', 'spare-lamp']),
+      powered: new Set<string>(),
+      rpm: new Map<string, number>(),
+      fluid: new Set<string>(),
+      voltage: new Map<string, number>(),
+      current: new Map<string, number>(),
+      torque: new Map<string, number>(),
+      flow: new Map<string, number>(),
+      pressure: new Map<string, number>(),
+      faults: new Map<string, string[]>(),
+    };
     expect(getMissionFeedback(graph, MISSIONS[0], state, true).status).toBe('inactive');
   });
   it('gives fresh guidance when switching to a different mission', () => {
