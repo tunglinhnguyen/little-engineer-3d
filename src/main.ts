@@ -464,8 +464,10 @@ function renderInspector(id: string | null) {
       p.signal === 'fluid' ? 'Nước' : 'Khớp';
     const direction = p.direction === 'out' ? 'ra' : p.direction === 'in' ? 'vào' : 'ghép';
     return '<li class="' + (other ? 'connected' : 'disconnected') + '">' +
-      (other ? '✓ ' : '○ ') + signalName + ' ' + direction +
-      (other ? ': ' + moduleName(other) : '') + '</li>';
+      '<span>' + (other ? '✓ ' : '○ ') + signalName + ' ' + direction +
+      (other ? ': ' + moduleName(other) : '') + '</span>' +
+      (other && mode === 'build' ? '<button class="detach-port" data-port="' + p.id + '" title="Tháo riêng khớp này">×</button>' : '') +
+      '</li>';
   }).join('');
 
   const metrics: string[] = [];
@@ -498,6 +500,9 @@ function renderInspector(id: string | null) {
   const elevationButtons = canElevate
     ? '<div class="elevation-row"><button id="lowerPart" ' + disabled + '>⬇ Hạ</button><button id="raisePart" ' + disabled + '>⬆ Nâng</button></div>'
     : '';
+  const terrainButtons = d.category === 'nature'
+    ? '<div class="elevation-row"><button id="digPart" ' + disabled + '>⛏ Đào</button><button id="raiseTerrainPart" ' + disabled + '>⛰ Đắp</button></div>'
+    : '';
 
   el.classList.add('compact');
   el.innerHTML =
@@ -514,8 +519,8 @@ function renderInspector(id: string | null) {
     '<div id="inspectDetails" class="inspect-details hidden">' +
       '<p class="science">🧠 ' + d.science + '</p>' +
       '<ul class="port-status" aria-label="Trạng thái kết nối">' + (ports || '<li>Không có cổng chức năng.</li>') + '</ul>' +
-      elevationButtons +
-      '<div class="inspect-actions"><button id="deletePart" class="danger" ' + disabled + '>🗑 Xóa</button></div>' +
+      elevationButtons + terrainButtons +
+      '<div class="inspect-actions"><button id="duplicatePart" ' + disabled + '>⧉ Nhân bản</button><button id="deletePart" class="danger" ' + disabled + '>🗑 Xóa</button></div>' +
     '</div>';
 
   document.querySelector<HTMLButtonElement>('#closeInspector')!.onclick = () => {
@@ -534,8 +539,18 @@ function renderInspector(id: string | null) {
   if (lower) lower.onclick = () => workbench.elevateSelected(-.5);
   if (raise) raise.onclick = () => workbench.elevateSelected(.5);
 
+  const duplicate = document.querySelector<HTMLButtonElement>('#duplicatePart');
+  if (duplicate) duplicate.onclick = () => workbench.duplicateSelected();
   const del = document.querySelector<HTMLButtonElement>('#deletePart');
   if (del) del.onclick = () => workbench.removeSelected();
+
+  document.querySelectorAll<HTMLButtonElement>('.detach-port').forEach(button => {
+    button.onclick = () => workbench.disconnectSelectedPort(button.dataset.port!);
+  });
+  const dig = document.querySelector<HTMLButtonElement>('#digPart');
+  const raiseTerrain = document.querySelector<HTMLButtonElement>('#raiseTerrainPart');
+  if (dig) dig.onclick = () => workbench.sculptSelected(-.25);
+  if (raiseTerrain) raiseTerrain.onclick = () => workbench.sculptSelected(.25);
 
   const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch');
   if (sw) sw.onclick = () => {
