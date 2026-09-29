@@ -41,6 +41,7 @@ export class Workbench {
   private labSign: THREE.Sprite | null = null;
   private vehicleTravel = new Map<string, number>();
   private cameraLocked = false;
+  private cameraFollowSelected = false;
   private routeGuide = new THREE.Group();
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
@@ -245,6 +246,13 @@ export class Workbench {
   }
 
   isCameraLocked() { return this.cameraLocked; }
+
+  setCameraFollowSelected(enabled: boolean) {
+    this.cameraFollowSelected = enabled;
+    if (enabled && this.selectedId) this.focusSelected();
+  }
+
+  isCameraFollowSelected() { return this.cameraFollowSelected; }
 
   private select(id: string | null) {
     this.selectedId = id;
@@ -871,6 +879,16 @@ export class Workbench {
           ));
           placeAssembly(vehicleId, target, vehicle.rotationY);
         }
+      }
+    }
+
+    if (this.cameraFollowSelected && this.selectedId) {
+      const selected = this.objects.get(this.selectedId);
+      if (selected) {
+        const desired = selected.position.clone();
+        const delta = desired.clone().sub(this.controls.target).multiplyScalar(.12);
+        this.controls.target.add(delta);
+        this.camera.position.add(delta);
       }
     }
 
