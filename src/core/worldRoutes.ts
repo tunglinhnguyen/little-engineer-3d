@@ -55,7 +55,7 @@ function structuralNeighbors(graph: ConnectionGraph, id: string, allowed: Set<Mo
   return out;
 }
 
-function nearestRouteModule(graph: ConnectionGraph, vehicle: ModuleInstance, allowed: Set<ModuleType>) {
+function nearestRouteModule(graph: ConnectionGraph, vehicle: ModuleInstance, allowed: Set<ModuleType>, maxDistance: number) {
   let best: ModuleInstance | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const module of graph.modules.values()) {
@@ -68,7 +68,7 @@ function nearestRouteModule(graph: ConnectionGraph, vehicle: ModuleInstance, all
       best = module;
     }
   }
-  return best;
+  return best && bestDistance <= maxDistance * maxDistance ? best : null;
 }
 
 function singleModulePath(module: ModuleInstance, kind: RouteKind) {
@@ -98,7 +98,8 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
   const kind = routeKindForVehicle(vehicle.type);
   if (!kind) return [];
   const allowed = ROUTE_TYPES[kind];
-  const nearest = nearestRouteModule(graph, vehicle, allowed);
+  const maxDistance = kind === 'runway' ? 5.5 : kind === 'rail' ? 3.8 : 4.2;
+  const nearest = nearestRouteModule(graph, vehicle, allowed, maxDistance);
   if (!nearest) return [];
 
   const component = new Set<string>([nearest.id]);
