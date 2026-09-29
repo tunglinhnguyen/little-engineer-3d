@@ -39,6 +39,7 @@ export class Workbench {
   private labSign: THREE.Sprite | null = null;
   private vehicleTravel = new Map<string, number>();
   private cameraLocked = false;
+  private routeGuide = new THREE.Group();
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
@@ -54,6 +55,7 @@ export class Workbench {
     this.camera.far = 180;
     this.camera.updateProjectionMatrix();
     this.scene.add(this.root);
+    this.scene.add(this.routeGuide);
     this.camera.position.set(14, 13, 17);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
@@ -240,6 +242,7 @@ export class Workbench {
   private select(id: string | null) {
     this.selectedId = id;
     this.refreshPorts();
+    this.refreshRouteGuide();
     for (const [key, o] of this.objects) {
       o.traverse(x => {
         if (x.userData.moduleLabel) x.visible = key === id;
@@ -249,6 +252,38 @@ export class Workbench {
       });
     }
     this.hooks.onSelect(id);
+  }
+
+  private refreshRouteGuide() {
+    while (this.routeGuide.children.length) {
+      const child = this.routeGuide.children.pop();
+      if (!child) break;
+      if ((child as THREE.Line).geometry) (child as THREE.Line).geometry.dispose();
+      const material = (child as THREE.Line).material;
+      if (material instanceof THREE.Material) material.dispose();
+    }
+
+    if (!this.selectedId) return;
+    const selected = this.graph.modules.get(this.selectedId);
+    if (!selected || MODULES[selected.type].behavior.kind !== 'vehicle') return;
+    const route = buildVehicleRoute(this.graph, selected.id);
+    if (route.length < 2) return;
+
+    const curve = new THREE.CatmullRomCurve3(route.map(p => new THREE.Vector3(...p)), false, 'centripetal', .5);
+    const points = curve.getPoints(Math.max(24, route.length * 14)).map(p => p.add(new THREE.Vector3(0, .08, 0)));
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const kind = routeKindForVehicle(selected.type);
+    const material = new THREE.LineDashedMaterial({
+      color: kind === 'rail' ? 0xf2bd3f : kind === 'runway' ? 0xffffff : 0x2a9ed2,
+      transparent: true,
+      opacity: .9,
+      dashSize: .28,
+      gapSize: .16,
+      depthTest: true,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.computeLineDistances();
+    this.routeGuide.add(line);
   }
 
   private refreshPorts() {
@@ -630,7 +665,25 @@ export class Workbench {
           );
           const length = Math.max(1, curve.getLength());
           const unitsPerSecond = travelSpeed * (.65 + Math.abs(speed) / 120 * 1.25);
-          const previousProgress = this.vehicleTravel.get(vehicleId) ?? 0;
+          let previousProgress = this.vehicleTravel.get(vehicleId);
+          if (previousProgress === undefined) {
+            const vehiclePoint = new THREE.Vector3(...vehicle.position);
+            let bestT = 0;
+            let bestDistance = Number.POSITIVE_INFINITY;
+            for (let i = 0; i <= 48; i++) {
+              const t = i / 48;
+              const point = curve.getPointAt(t);
+              const distance = point.distanceToSquared(vehiclePoint);
+              if (distance < bestDistance) {
+                bestDistance = distance;
+                bestT = t;
+              }
+            }
+            const tangent = curve.getTangentAt(THREE.MathUtils.clamp(bestT, .001, .999));
+            const forward = new THREE.Vector3(Math.cos(vehicle.rotationY), 0, -Math.sin(vehicle.rotationY));
+            previousProgress = forward.dot(tangent) >= 0 ? bestT : 2 - bestT;
+            this.vehicleTravel.set(vehicleId, previousProgress);
+          }
           let progress = previousProgress + unitsPerSecond * dt / length;
 
           const sample = (rawProgress: number) => {
