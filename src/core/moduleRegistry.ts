@@ -305,22 +305,22 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   foundation: {
     type: 'foundation', name: 'Nền nhà', icon: '⬜', category: 'building',
     description: 'Mặt nền để ghép tường và cột.', science: 'Móng và nền phân bố tải công trình xuống đất.',
-    size: [2.2, .24, 2.2], ports: [...STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] })), { ...STRUCT_Y[1], position: [0, .18, 0] }], behavior: { kind: 'structure' },
+    size: [2.2, .24, 2.2], ports: [...STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] as [number, number, number] })), { ...STRUCT_Y[1], position: [0, .18, 0] as [number, number, number] }], behavior: { kind: 'structure' },
   },
   wall: {
     type: 'wall', name: 'Tường', icon: '🧱', category: 'building',
     description: 'Mảng tường xây nhà.', science: 'Tường bao che không gian và có thể tham gia chịu lực.',
-    size: [2.0, 1.65, .28], ports: [...STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), { ...STRUCT_Y[0], position: [0, -.86, 0] }, { ...STRUCT_Y[1], position: [0, .86, 0] }], behavior: { kind: 'structure' },
+    size: [2.0, 1.65, .28], ports: [...STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] as [number, number, number] })), { ...STRUCT_Y[0], position: [0, -.86, 0] as [number, number, number] }, { ...STRUCT_Y[1], position: [0, .86, 0] as [number, number, number] }], behavior: { kind: 'structure' },
   },
   'door-wall': {
     type: 'door-wall', name: 'Tường cửa đi', icon: '🚪', category: 'building',
     description: 'Tường có cửa ra vào.', science: 'Ô cửa cần dầm phía trên để truyền tải quanh khoảng mở.',
-    size: [2.0, 1.65, .28], ports: [...STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), { ...STRUCT_Y[0], position: [0, -.86, 0] }, { ...STRUCT_Y[1], position: [0, .86, 0] }], behavior: { kind: 'structure' },
+    size: [2.0, 1.65, .28], ports: [...STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] as [number, number, number] })), { ...STRUCT_Y[0], position: [0, -.86, 0] as [number, number, number] }, { ...STRUCT_Y[1], position: [0, .86, 0] as [number, number, number] }], behavior: { kind: 'structure' },
   },
   'window-wall': {
     type: 'window-wall', name: 'Tường cửa sổ', icon: '🪟', category: 'building',
     description: 'Tường có cửa lấy sáng.', science: 'Cửa sổ đưa ánh sáng và thông gió vào không gian.',
-    size: [2.0, 1.65, .28], ports: [...STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] })), { ...STRUCT_Y[0], position: [0, -.86, 0] }, { ...STRUCT_Y[1], position: [0, .86, 0] }], behavior: { kind: 'structure' },
+    size: [2.0, 1.65, .28], ports: [...STRUCT_X.map(p => ({ ...p, position: [p.position[0] * 1.4, 0, 0] as [number, number, number] })), { ...STRUCT_Y[0], position: [0, -.86, 0] as [number, number, number] }, { ...STRUCT_Y[1], position: [0, .86, 0] as [number, number, number] }], behavior: { kind: 'structure' },
   },
   roof: {
     type: 'roof', name: 'Mái nhà', icon: '🏠', category: 'building',
@@ -450,12 +450,12 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   'floor-slab': {
     type: 'floor-slab', name: 'Sàn tầng', icon: '▱', category: 'building',
     description: 'Tấm sàn để xây nhà nhiều tầng.', science: 'Sàn truyền tải trọng sử dụng sang dầm, tường hoặc cột.',
-    size: [2.2, .18, 2.2], ports: [...STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] })), { ...STRUCT_Y[0], position: [0, -.13, 0] }, { ...STRUCT_Y[1], position: [0, .13, 0] }], behavior: { kind: 'structure' },
+    size: [2.2, .18, 2.2], ports: [...STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] as [number, number, number] })), { ...STRUCT_Y[0], position: [0, -.13, 0] as [number, number, number] }, { ...STRUCT_Y[1], position: [0, .13, 0] as [number, number, number] }], behavior: { kind: 'structure' },
   },
   stairs: {
     type: 'stairs', name: 'Cầu thang', icon: '🪜', category: 'building',
     description: 'Cầu thang nối các cao độ trong nhà.', science: 'Bậc thang chia chênh cao thành nhiều bước nhỏ để di chuyển an toàn.',
-    size: [1.2, 1.25, 2.0], ports: [{ ...STRUCT_Y[0], position: [0, -.66, -.68] }, { ...STRUCT_Y[1], position: [0, .66, .68] }], behavior: { kind: 'structure' },
+    size: [1.2, 1.25, 2.0], ports: [{ ...STRUCT_Y[0], position: [0, -.66, -.68] as [number, number, number] }, { ...STRUCT_Y[1], position: [0, .66, .68] as [number, number, number] }], behavior: { kind: 'structure' },
   },
   balcony: {
     type: 'balcony', name: 'Ban công', icon: '🏠', category: 'building',
