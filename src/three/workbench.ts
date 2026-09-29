@@ -107,6 +107,19 @@ export class Workbench {
     this.graph.snapModule(m.id); o.position.set(...m.position); this.refreshPorts(); this.hooks.onGraphChanged();
   }
 
+  elevateSelected(delta: number) {
+    if (!this.selectedId || !this.hooks.canEdit()) return;
+    const m = this.graph.modules.get(this.selectedId), o = this.objects.get(this.selectedId);
+    if (!m || !o) return;
+    this.finishDrag(true);
+    this.graph.disconnectModule(m.id);
+    const nextY = Math.max(.15, Math.min(5.15, Math.round((m.position[1] + delta) * 4) / 4));
+    m.position = [m.position[0], nextY, m.position[2]];
+    o.position.set(...m.position);
+    this.refreshPorts();
+    this.hooks.onGraphChanged();
+  }
+
   toggleSwitch() {
     if (!this.selectedId) return;
     const m = this.graph.modules.get(this.selectedId);
