@@ -29,11 +29,50 @@ export type ModuleType =
   | 'pipe'
   | 'valve'
   | 'nozzle'
-  | 'chassis';
+  | 'chassis'
+  | 'axle'
+  | 'differential'
+  | 'gearbox'
+  | 'car-base'
+  | 'motorcycle-base'
+  | 'train-engine'
+  | 'train-wagon'
+  | 'road-straight'
+  | 'road-curve'
+  | 'rail-straight'
+  | 'rail-curve'
+  | 'rail-crossing'
+  | 'bridge'
+  | 'foundation'
+  | 'wall'
+  | 'door-wall'
+  | 'window-wall'
+  | 'roof'
+  | 'column'
+  | 'fence'
+  | 'grass-tile'
+  | 'soil-tile'
+  | 'water-tile'
+  | 'river-tile'
+  | 'hill'
+  | 'mountain'
+  | 'tree'
+  | 'cloud'
+  | 'rock';
 
 export type SignalType = 'power' | 'rotation' | 'fluid' | 'structural';
 export type PortDirection = 'in' | 'out' | 'bi';
-export type ModuleCategory = 'energy' | 'control' | 'motion' | 'output' | 'fluid' | 'structure';
+export type ModuleCategory =
+  | 'energy'
+  | 'control'
+  | 'motion'
+  | 'output'
+  | 'fluid'
+  | 'structure'
+  | 'vehicle'
+  | 'transport'
+  | 'building'
+  | 'nature';
 
 export interface PortDefinition {
   id: string;
@@ -69,10 +108,12 @@ export interface ModuleDefinition {
       | 'fluid-valve'
       | 'pump'
       | 'fluid-output'
-      | 'structure';
+      | 'structure'
+      | 'vehicle';
     rpm?: number;
     ratio?: number;
     teeth?: number;
+    vehicleSpeed?: number;
   };
 }
 
@@ -108,5 +149,6 @@ export interface Mission {
   lesson: string;
   requiredPath: ModuleType[];
   requiredPaths?: ModuleType[][];
+  requiredModules?: ModuleType[];
   success: string;
 }
