@@ -116,6 +116,22 @@ export class ConnectionGraph {
     return best;
   }
 
+  previewSnap(id: string, maxDistance = 1.05) {
+    const moving = this.modules.get(id);
+    const nearest = this.snapCandidate(id, maxDistance);
+    if (!moving || !nearest) return null;
+    const position = new Vector3(...moving.position).add(nearest.delta).toArray() as [number, number, number];
+    return {
+      position,
+      rotationY: nearest.rotationY,
+      signal: nearest.movingPort.signal,
+      movingPortId: nearest.movingPort.id,
+      targetModuleId: nearest.other.id,
+      targetPortId: nearest.otherPort.id,
+      distance: nearest.distance,
+    };
+  }
+
   attachModuleToTarget(id: string, targetId: string): boolean {
     const moving = this.modules.get(id);
     const target = this.modules.get(targetId);
