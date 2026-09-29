@@ -32,6 +32,23 @@ export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, sta
     }
   }
 
+  const missingRequiredModules = (mission.requiredModules ?? []).filter(type =>
+    ![...graph.modules.values()].some(m => m.type === type)
+  );
+  if (missingRequiredModules.length) {
+    return {
+      status: 'incomplete',
+      message: 'Cần thêm: ' + missingRequiredModules.map(type => MODULES[type].name).join(', ') + '.',
+    };
+  }
+
+  if (mission.buildOnly) {
+    return {
+      status: 'complete',
+      message: '🏗️ ' + mission.success,
+    };
+  }
+
   const controlsOn = paths.every(required =>
     graph.findPathByTypes(required, path =>
       path.every(m => (m.type !== 'switch' && m.type !== 'valve') || m.switchOn !== false)
@@ -151,5 +168,56 @@ export const MISSIONS: Mission[] = [
     lesson: 'Dòng điện làm phần tử trong còi rung và phát âm.',
     requiredPath: ['battery', 'switch', 'buzzer'],
     success: 'Còi điện đang phát tiếng báo.',
+  },
+  {
+    id: 'car', title: 'Lắp ô tô điện', emoji: '🚗',
+    description: 'Ráp Pin → Công tắc → Mô tơ → Hộp số → Vi sai → Khung ô tô. Đặt thêm một đoạn đường.',
+    lesson: 'Hộp số đổi tốc độ, vi sai truyền mô-men tới bánh và giúp xe vào cua.',
+    requiredPath: ['battery', 'switch', 'motor', 'gearbox', 'differential', 'car-base'],
+    requiredModules: ['road-straight'],
+    success: 'Ô tô đã nhận truyền động; bốn bánh quay và có hiệu ứng xe chạy.',
+  },
+  {
+    id: 'motorcycle', title: 'Lắp xe máy điện', emoji: '🏍️',
+    description: 'Ráp Pin → Công tắc → Mô tơ → Hộp số → Khung xe máy. Đặt đường để tạo đường chạy.',
+    lesson: 'Xe hai bánh cần mô-men tới bánh chủ động và hai bánh thẳng hàng.',
+    requiredPath: ['battery', 'switch', 'motor', 'gearbox', 'motorcycle-base'],
+    requiredModules: ['road-straight'],
+    success: 'Xe máy đã hoạt động; bánh quay và động cơ phát âm thanh.',
+  },
+  {
+    id: 'train', title: 'Đầu tàu chạy trên ray', emoji: '🚂',
+    description: 'Ráp Pin → Công tắc → Mô tơ → Hộp số → Đầu tàu điện. Đặt Ray thẳng, có thể ghép thêm Toa tàu.',
+    lesson: 'Ray dẫn hướng bánh tàu; đầu tàu cung cấp lực kéo cho cả đoàn.',
+    requiredPath: ['battery', 'switch', 'motor', 'gearbox', 'train-engine'],
+    requiredModules: ['rail-straight'],
+    success: 'Đầu tàu đã hoạt động trên hệ ray mô phỏng.',
+  },
+  {
+    id: 'house', title: 'Xây ngôi nhà', emoji: '🏠',
+    description: 'Dùng Nền nhà, Tường, Tường cửa đi, Tường cửa sổ và Mái nhà để tạo một ngôi nhà.',
+    lesson: 'Một công trình có nền chịu tải, tường bao che và mái che nắng mưa.',
+    requiredPath: ['foundation'],
+    requiredModules: ['wall', 'door-wall', 'window-wall', 'roof'],
+    buildOnly: true,
+    success: 'Con đã có đủ các bộ phận chính để xây một ngôi nhà.',
+  },
+  {
+    id: 'landscape', title: 'Tạo thế giới thiên nhiên', emoji: '🌍',
+    description: 'Ghép Thảm cỏ, Hồ nước hoặc Sông, thêm Cây, Đồi/Núi và Mây.',
+    lesson: 'Địa hình, nước và thực vật kết hợp thành một cảnh quan có cấu trúc.',
+    requiredPath: ['grass-tile'],
+    requiredModules: ['water-tile', 'tree', 'hill', 'cloud'],
+    buildOnly: true,
+    success: 'Một cảnh quan nhỏ đã hình thành. Con có thể tiếp tục mở rộng sông, núi, đường và nhà.',
+  },
+  {
+    id: 'bridge-world', title: 'Xây cầu qua sông', emoji: '🌉',
+    description: 'Đặt Đoạn sông, Cầu và nối Đường thẳng hai phía.',
+    lesson: 'Cầu cho tuyến giao thông vượt chướng ngại như sông hoặc thung lũng.',
+    requiredPath: ['river-tile'],
+    requiredModules: ['bridge', 'road-straight'],
+    buildOnly: true,
+    success: 'Con đã có đủ mô-đun để tạo một tuyến đường vượt sông.',
   },
 ];
