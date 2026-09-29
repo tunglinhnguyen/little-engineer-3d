@@ -8,8 +8,8 @@ export function portsCompatible(a: PortDefinition, b: PortDefinition): boolean {
   return (a.direction === 'out' && b.direction === 'in') || (a.direction === 'in' && b.direction === 'out');
 }
 
-const ROAD_PARTS = new Set<ModuleType>(['road-straight', 'road-curve', 'bridge']);
-const RAIL_PARTS = new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'bridge']);
+const ROAD_PARTS = new Set<ModuleType>(['road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'bridge']);
+const RAIL_PARTS = new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'rail-bridge']);
 const RUNWAY_PARTS = new Set<ModuleType>(['runway']);
 const WATERFRONT_PARTS = new Set<ModuleType>(['harbor', 'dock']);
 const TRAIN_PARTS = new Set<ModuleType>(['train-engine', 'train-wagon']);
