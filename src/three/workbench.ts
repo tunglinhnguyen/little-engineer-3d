@@ -5,7 +5,7 @@ import { ConnectionGraph, modulePortsCompatible } from '../core/connectionGraph'
 import { buildVehicleRoute, routeKindForVehicle } from '../core/worldRoutes';
 import { vehicleInfrastructureStatus } from '../core/vehicleRules';
 import { collisionsFor } from '../core/physics';
-import type { Connection, ModuleInstance } from '../core/types';
+import type { Connection, ModuleInstance, SimulationState } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
 
 export interface WorkbenchHooks {
@@ -21,6 +21,7 @@ export class Workbench {
   readonly controls: OrbitControls;
   readonly root = new THREE.Group();
   readonly connectionLayer = new THREE.Group();
+  readonly energyLayer = new THREE.Group();
   readonly graph: ConnectionGraph;
   selectedId: string | null = null;
   private objects = new Map<string, THREE.Group>();
@@ -46,6 +47,16 @@ export class Workbench {
   private cameraLocked = false;
   private cameraFollowSelected = false;
   private routeGuide = new THREE.Group();
+  private energyMode: 'off' | 'power' | 'rotation' | 'fluid' | 'all' = 'off';
+  private hemi!: THREE.HemisphereLight;
+  private sun!: THREE.DirectionalLight;
+  private rain!: THREE.Points;
+  private weather: 'clear' | 'rain' = 'clear';
+  private dayPhase: 'day' | 'night' = 'day';
+  private performanceMode = false;
+  private frameTimes: number[] = [];
+  private xraySelected = false;
+  private explodedSelected = false;
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
@@ -62,6 +73,7 @@ export class Workbench {
     this.camera.updateProjectionMatrix();
     this.scene.add(this.root);
     this.scene.add(this.connectionLayer);
+    this.scene.add(this.energyLayer);
     this.scene.add(this.routeGuide);
     this.camera.position.set(14, 13, 17);
     this.controls = new OrbitControls(this.camera, canvas);
@@ -74,17 +86,19 @@ export class Workbench {
     this.controls.panSpeed = .8;
     this.controls.rotateSpeed = .7;
     this.controls.zoomSpeed = .8;
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6b8478, 2.4));
-    const sun = new THREE.DirectionalLight(0xfff7e9, 3.25);
-    sun.position.set(-8, 13, 8);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -.00035;
-    sun.shadow.normalBias = .025;
-    const shadowCamera = sun.shadow.camera as THREE.OrthographicCamera;
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x6b8478, 2.4);
+    this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xfff7e9, 3.25);
+    this.sun.position.set(-8, 13, 8);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.bias = -.00035;
+    this.sun.shadow.normalBias = .025;
+    const shadowCamera = this.sun.shadow.camera as THREE.OrthographicCamera;
     shadowCamera.left = -28; shadowCamera.right = 28; shadowCamera.top = 24; shadowCamera.bottom = -24;
     shadowCamera.near = 1; shadowCamera.far = 40;
-    this.scene.add(sun);
+    this.scene.add(this.sun);
+    this.createRain();
     this.floor.rotation.x = -Math.PI / 2; this.floor.position.y = 0; this.floor.receiveShadow = true; this.scene.add(this.floor);
     const grid = new THREE.GridHelper(56, 112, 0x688b7b, 0xa7bfb1);
     grid.position.y = .012;
@@ -196,6 +210,137 @@ export class Workbench {
         material.emissiveIntensity = 0;
       }
     });
+  }
+
+  private createRain() {
+    const count = 900;
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - .5) * 52;
+      positions[i * 3 + 1] = Math.random() * 18 + 2;
+      positions[i * 3 + 2] = (Math.random() - .5) * 38;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({ color: 0xbbe8ff, size: .065, transparent: true, opacity: .62 });
+    this.rain = new THREE.Points(geometry, material);
+    this.rain.visible = false;
+    this.scene.add(this.rain);
+  }
+
+  setWeather(weather: 'clear' | 'rain') {
+    this.weather = weather;
+    if (this.rain) this.rain.visible = weather === 'rain';
+    this.scene.fog = new THREE.Fog(
+      weather === 'rain' ? 0xa8c5cf : (this.dayPhase === 'night' ? 0x0b1c2d : 0xcde8f2),
+      weather === 'rain' ? 34 : 58,
+      weather === 'rain' ? 78 : 110,
+    );
+  }
+
+  setDayPhase(phase: 'day' | 'night') {
+    this.dayPhase = phase;
+    const night = phase === 'night';
+    this.scene.background = new THREE.Color(night ? 0x071526 : 0xcde8f2);
+    this.hemi.intensity = night ? .58 : 2.4;
+    this.hemi.color.setHex(night ? 0x5978a7 : 0xffffff);
+    this.hemi.groundColor.setHex(night ? 0x17232c : 0x6b8478);
+    this.sun.intensity = night ? .32 : 3.25;
+    this.sun.color.setHex(night ? 0x9dbdff : 0xfff7e9);
+    this.renderer.toneMappingExposure = night ? .78 : 1.04;
+    this.setWeather(this.weather);
+  }
+
+  setPerformanceMode(enabled: boolean) {
+    this.performanceMode = enabled;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, enabled ? 1 : 1.6));
+    this.sun.castShadow = !enabled;
+    this.renderer.shadowMap.enabled = !enabled;
+  }
+
+  setXRaySelected(enabled: boolean) {
+    this.xraySelected = enabled;
+    if (!this.selectedId) return;
+    const object = this.objects.get(this.selectedId);
+    if (!object) return;
+    object.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || child.userData.isPortVisual) return;
+      const material = mesh.material;
+      if (!(material instanceof THREE.MeshStandardMaterial)) return;
+      if (material.userData.baseOpacity === undefined) material.userData.baseOpacity = material.opacity;
+      material.transparent = enabled || (material.userData.baseOpacity as number) < 1;
+      material.opacity = enabled ? .28 : material.userData.baseOpacity as number;
+      material.depthWrite = !enabled;
+    });
+  }
+
+  setExplodedSelected(enabled: boolean) {
+    this.explodedSelected = enabled;
+    if (!this.selectedId) return;
+    const object = this.objects.get(this.selectedId);
+    if (!object) return;
+    object.children.forEach((child, index) => {
+      if (child.userData.moduleLabel || child.userData.isPortVisual) return;
+      const base = child.userData.explodeBase as [number, number, number] | undefined;
+      if (!base) child.userData.explodeBase = child.position.toArray();
+      const origin = new THREE.Vector3(...(child.userData.explodeBase as [number, number, number]));
+      if (!enabled) {
+        child.position.copy(origin);
+        return;
+      }
+      let direction = origin.clone();
+      if (direction.lengthSq() < .02) {
+        const angle = index * 2.39996;
+        direction.set(Math.cos(angle), ((index % 3) - 1) * .35, Math.sin(angle));
+      }
+      direction.normalize().multiplyScalar(.42 + (index % 3) * .08);
+      child.position.copy(origin.add(direction));
+    });
+  }
+
+  setEnergyView(mode: 'off' | 'power' | 'rotation' | 'fluid' | 'all', state: SimulationState) {
+    this.energyMode = mode;
+    while (this.energyLayer.children.length) {
+      const child = this.energyLayer.children[0];
+      this.energyLayer.remove(child);
+      const line = child as THREE.Line;
+      line.geometry?.dispose?.();
+      const mat = line.material;
+      if (mat instanceof THREE.Material) mat.dispose();
+    }
+    if (mode === 'off') return;
+
+    const axisY = new THREE.Vector3(0,1,0);
+    const pointFor = (module: ModuleInstance, portId: string) => {
+      const port = MODULES[module.type].ports.find(p => p.id === portId);
+      if (!port) return null;
+      return new THREE.Vector3(...port.position).applyAxisAngle(axisY,module.rotationY).add(new THREE.Vector3(...module.position));
+    };
+    const activeSignal = (signal: Connection['signal'], fromId: string, toId: string) => {
+      if (signal === 'power') return state.powered.has(fromId) && state.powered.has(toId);
+      if (signal === 'rotation') return state.rpm.has(fromId) && state.rpm.has(toId);
+      if (signal === 'fluid') return state.fluid.has(fromId) && state.fluid.has(toId);
+      return false;
+    };
+
+    for (const connection of this.graph.connections.values()) {
+      if (connection.signal === 'structural') continue;
+      if (mode !== 'all' && connection.signal !== mode) continue;
+      if (!activeSignal(connection.signal,connection.fromModuleId,connection.toModuleId)) continue;
+      const from=this.graph.modules.get(connection.fromModuleId),to=this.graph.modules.get(connection.toModuleId);
+      if(!from||!to) continue;
+      const a=pointFor(from,connection.fromPortId),b=pointFor(to,connection.toPortId);
+      if(!a||!b) continue;
+      const color=connection.signal==='power'?0xff5a52:connection.signal==='rotation'?0xffcc45:0x37c8ff;
+      const geometry=new THREE.BufferGeometry().setFromPoints([a.clone().add(new THREE.Vector3(0,.08,0)),b.clone().add(new THREE.Vector3(0,.08,0))]);
+      const material=new THREE.LineDashedMaterial({color,dashSize:.18,gapSize:.1,transparent:true,opacity:.98});
+      const line=new THREE.Line(geometry,material);
+      line.computeLineDistances();
+      line.userData.energyFlow=true;
+      line.userData.signal=connection.signal;
+      this.energyLayer.add(line);
+    }
   }
 
   addInstance(instance: ModuleInstance, attachToId: string | null = null) {
@@ -336,6 +481,8 @@ export class Workbench {
         if (mat instanceof THREE.MeshStandardMaterial) mat.emissiveIntensity = key === id ? .12 : 0;
       });
     }
+    if (id && this.xraySelected) this.setXRaySelected(true);
+    if (id && this.explodedSelected) this.setExplodedSelected(true);
     this.hooks.onSelect(id);
   }
 
@@ -956,6 +1103,30 @@ export class Workbench {
           placeAssembly(vehicleId, target, vehicle.rotationY);
         }
       }
+    }
+
+    if (this.weather === 'rain' && this.rain?.visible) {
+      const positions = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < positions.count; i++) {
+        let y = positions.getY(i) - dt * 9;
+        if (y < .2) y = 18 + Math.random() * 3;
+        positions.setY(i,y);
+      }
+      positions.needsUpdate = true;
+    }
+
+    for (const child of this.energyLayer.children) {
+      const line = child as THREE.Line;
+      const material = line.material;
+      if (material instanceof THREE.LineDashedMaterial) material.dashOffset -= dt * 1.4;
+    }
+
+    this.frameTimes.push(dt);
+    if (this.frameTimes.length > 120) this.frameTimes.shift();
+    if (!this.performanceMode && this.frameTimes.length === 120) {
+      const average = this.frameTimes.reduce((a,b)=>a+b,0)/this.frameTimes.length;
+      if (average > .03) this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.15));
+      else if (average < .019) this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
     }
 
     if (this.cameraFollowSelected && this.selectedId) {
