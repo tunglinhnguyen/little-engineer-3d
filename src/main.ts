@@ -8,6 +8,11 @@ import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
 import { SoundEngine } from './ui/sound';
 import { vehicleCanTravel } from './core/vehicleRules';
+import { ProjectStore } from './core/projectStore';
+import { ProgressStore, ACHIEVEMENTS } from './core/progress';
+import { BLUEPRINTS, instantiateBlueprint } from './core/blueprints';
+import { TUTORIALS, tutorialProgress } from './core/tutorials';
+import { worldCollisionReport } from './core/physics';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
@@ -27,6 +32,7 @@ app.innerHTML = `
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
+      <button id="toolboxBtn" class="icon-btn" title="Công cụ kỹ sư">🧰</button>
       <button id="undoBtn" class="icon-btn" title="Hoàn tác" aria-label="Hoàn tác">↶</button>
       <button id="redoBtn" class="icon-btn" title="Làm lại thao tác" aria-label="Làm lại thao tác">↷</button>
       <button id="saveBtn" class="icon-btn" title="Lưu">💾</button><button id="resetBtn" class="icon-btn" title="Xóa thế giới">🗑️</button>
@@ -38,6 +44,55 @@ app.innerHTML = `
     <div class="mission-actions"><button id="prevMission">‹</button><span id="missionCount"></span><button id="nextMission">›</button></div>
   </aside>
   <aside class="inspector panel hidden-by-user" id="inspector"></aside>
+  <aside class="tool-drawer panel hidden-by-user" id="toolDrawer">
+    <div class="tool-head"><b>🧰 Bộ công cụ Kỹ sư</b><button id="closeTools">×</button></div>
+    <div class="tool-tabs">
+      <button data-tool-tab="build" class="active">Xây dựng</button>
+      <button data-tool-tab="learn">Học</button>
+      <button data-tool-tab="projects">Dự án</button>
+      <button data-tool-tab="profile">Hồ sơ</button>
+    </div>
+    <div class="tool-page" data-tool-page="build">
+      <div class="tool-section"><b>Chế độ thế giới</b><div class="tool-grid">
+        <button id="sandboxBtn">🧱 Sandbox</button>
+        <button id="energyBtn">✨ Dòng năng lượng: Tắt</button>
+        <button id="xrayBtn">🩻 X-ray</button>
+        <button id="explodeBtn">💥 Xem cấu tạo</button>
+        <button id="dayNightBtn">🌙 Ban đêm</button>
+        <button id="weatherBtn">🌧 Mưa</button>
+        <button id="performanceBtn">⚡ Tối ưu iPad</button>
+      </div></div>
+      <div class="tool-section"><b>Blueprint</b><div id="blueprintList" class="blueprint-list"></div></div>
+      <div class="tool-section maker">
+        <b>🧩 Tạo mô-đun</b>
+        <div class="maker-grid">
+          <input id="makerName" maxlength="22" placeholder="Tên mô-đun" value="Khối của con" />
+          <select id="makerSignal">
+            <option value="structure">Kết cấu</option><option value="power">Điện</option>
+            <option value="rotation">Truyền động</option><option value="fluid">Nước</option>
+          </select>
+          <select id="makerShape"><option value="box">Khối hộp</option><option value="cylinder">Hình trụ</option></select>
+          <input id="makerColor" type="color" value="#6d9fd1" />
+          <label>Rộng <input id="makerX" type="range" min="0.5" max="2.5" step="0.1" value="1.2"/></label>
+          <label>Cao <input id="makerY" type="range" min="0.4" max="2.5" step="0.1" value="1.0"/></label>
+          <label>Dài <input id="makerZ" type="range" min="0.5" max="2.5" step="0.1" value="1.2"/></label>
+          <button id="createMakerBtn">➕ Tạo khối</button>
+        </div>
+      </div>
+    </div>
+    <div class="tool-page hidden" data-tool-page="learn">
+      <div class="tool-section"><b>🎓 Hướng dẫn tương tác</b><div id="tutorialList" class="tutorial-list"></div><div id="tutorialProgress" class="tutorial-progress"></div></div>
+      <div class="tool-section"><b>Chế độ học</b><div class="tool-grid"><button id="kidModeBtn" class="active">🧒 Trẻ em</button><button id="engineerModeBtn">🧠 Kỹ sư nhỏ</button></div></div>
+    </div>
+    <div class="tool-page hidden" data-tool-page="projects">
+      <div class="tool-section project-create"><input id="projectName" maxlength="40" placeholder="Tên công trình" value="Thành phố của con"/><button id="saveProjectBtn">💾 Lưu thành dự án</button></div>
+      <div class="tool-section"><div class="tool-grid"><button id="exportProjectBtn">📤 Sao chép JSON</button><button id="importProjectBtn">📥 Nhập JSON</button></div></div>
+      <div id="projectList" class="project-list"></div>
+    </div>
+    <div class="tool-page hidden" data-tool-page="profile">
+      <div id="profileSummary"></div>
+    </div>
+  </aside>
   <nav class="camera-bar panel">
     <button data-camera="iso" class="active">◩ Chéo</button>
     <button data-camera="top">▦ Trên</button>
