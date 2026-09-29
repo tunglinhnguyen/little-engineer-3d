@@ -505,12 +505,9 @@ export const PALETTE: ModuleType[] = [
   'motor', 'shaft', 'bearing', 'gear-small', 'gear-large', 'belt-drive', 'cam', 'axle', 'differential', 'gearbox',
   'wheel', 'fan', 'propeller', 'drill', 'piston', 'conveyor', 'winch', 'mixer', 'lamp', 'led', 'buzzer',
   'water-tank', 'pipe', 'valve', 'pump', 'nozzle',
-  'car-base', 'motorcycle-base', 'train-engine', 'train-wagon',
-  'road-straight', 'road-curve', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge',
-  'foundation', 'wall', 'door-wall', 'window-wall', 'roof', 'column', 'fence', 'chassis',
-  'airplane', 'helicopter', 'boat', 'crane', 'excavator', 'bulldozer', 'firetruck',
-  'runway', 'helipad', 'harbor', 'dock',
-  'foundation', 'floor-slab', 'wall', 'door-wall', 'window-wall', 'roof', 'stairs', 'balcony', 'door', 'column', 'fence',
+  'car-base', 'motorcycle-base', 'train-engine', 'train-wagon', 'airplane', 'helicopter', 'boat', 'crane', 'excavator', 'bulldozer', 'firetruck',
+  'road-straight', 'road-curve', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge', 'runway', 'helipad', 'harbor', 'dock',
+  'foundation', 'floor-slab', 'wall', 'door-wall', 'window-wall', 'roof', 'stairs', 'balcony', 'door', 'column', 'fence', 'chassis',
   'chair', 'table', 'sofa', 'bed', 'kitchen', 'bookshelf', 'streetlight', 'traffic-light', 'hydrant',
   'grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'sea-tile', 'island', 'waterfall', 'cave', 'hill', 'mountain', 'tree', 'bush', 'flower', 'cloud', 'rock',
-];
+]
