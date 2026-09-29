@@ -318,13 +318,38 @@ function renderInspector(id: string | null) {
       ? '✅ Sẵn sàng chạy · ' + Math.round(Math.abs(rpm ?? 0)) + ' rpm · ' + travel.infrastructure.message
       : '⚠️ ' + travel.message;
   } else if (d.behavior.kind === 'motor') {
-    runtimeStatus = state.powered.has(id) ? '✅ Mô tơ đang được cấp điện.' : '○ Mô tơ chưa có điện.';
+    runtimeStatus = state.powered.has(id) ? '✅ Mô tơ có điện và đang tạo mô-men.' : '○ Mô tơ chưa có điện.';
   } else if (d.behavior.kind === 'pump') {
     runtimeStatus = state.rpm.has(id) && state.fluid.has(id)
-      ? '✅ Bơm có cả mô-men và nguồn nước.'
+      ? '✅ Bơm có cả mô-men và nước đầu hút.'
       : state.rpm.has(id)
         ? '⚠️ Bơm đang quay nhưng chưa có nước đầu hút.'
-        : '○ Bơm chưa nhận truyền động.';
+        : state.fluid.has(id)
+          ? '⚠️ Có nước nhưng cánh bơm chưa quay.'
+          : '○ Cần cả truyền động quay và nguồn nước.';
+  } else if (d.behavior.kind === 'source') {
+    runtimeStatus = '✅ Nguồn điện sẵn sàng.';
+  } else if (d.behavior.kind === 'rotation-source') {
+    runtimeStatus = '✅ Nguồn quay ' + Math.round(Math.abs(state.rpm.get(id) ?? d.behavior.rpm ?? 0)) + ' rpm.';
+  } else if (d.behavior.kind === 'switch') {
+    runtimeStatus = m.switchOn === false ? '⛔ Công tắc đang ngắt mạch.' : '✅ Công tắc đang đóng mạch.';
+  } else if (
+    d.behavior.kind === 'pass-rotation' ||
+    d.behavior.kind === 'gear' ||
+    d.behavior.kind === 'transmission' ||
+    d.behavior.kind === 'rotation-output'
+  ) {
+    runtimeStatus = state.rpm.has(id)
+      ? '✅ Đang quay ' + Math.round(Math.abs(state.rpm.get(id) ?? 0)) + ' rpm.'
+      : '○ Chưa nhận chuyển động quay.';
+  } else if (d.behavior.kind === 'power-output' || d.behavior.kind === 'sensor') {
+    runtimeStatus = state.powered.has(id) ? '✅ Đang được cấp điện.' : '○ Chưa có điện.';
+  } else if (d.behavior.kind === 'fluid-valve') {
+    runtimeStatus = m.switchOn === false
+      ? '⛔ Van đang đóng.'
+      : state.fluid.has(id) ? '✅ Van mở và có nước đi qua.' : '○ Van mở nhưng chưa có nước đầu vào.';
+  } else if (d.behavior.kind === 'fluid-pass' || d.behavior.kind === 'fluid-output') {
+    runtimeStatus = state.fluid.has(id) ? '✅ Có dòng nước.' : '○ Chưa có dòng nước.';
   }
 
 
