@@ -1,0 +1,27 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  timeout: 45_000,
+  expect: { timeout: 10_000 },
+  fullyParallel: false,
+  workers: 1,
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  use: {
+    baseURL: 'http://127.0.0.1:4173',
+    viewport: { width: 1180, height: 820 },
+    deviceScaleFactor: 1,
+    hasTouch: true,
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
+    launchOptions: {
+      args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
+    },
+  },
+  webServer: {
+    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+    url: 'http://127.0.0.1:4173',
+    reuseExistingServer: true,
+    timeout: 120_000,
+  },
+});
