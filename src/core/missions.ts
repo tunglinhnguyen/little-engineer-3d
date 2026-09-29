@@ -3,31 +3,66 @@ import { MODULES } from './moduleRegistry';
 import { vehicleCanTravel } from './vehicleRules';
 import type { Mission, ModuleType, SimulationState } from './types';
 
-function pathsFor(mission: Mission): ModuleType[][] {
-  return [mission.requiredPath, ...(mission.requiredPaths ?? [])];
+function primaryOptions(mission: Mission): ModuleType[][] {
+  return [mission.requiredPath, ...(mission.alternativePaths ?? [])];
+}
+
+function matchedPrimaryPath(graph: ConnectionGraph, mission: Mission) {
+  return primaryOptions(mission).find(path => graph.findPathByTypes(path)) ?? null;
+}
+
+function closestPrimaryPath(graph: ConnectionGraph, mission: Mission) {
+  const modules = [...graph.modules.values()];
+  return [...primaryOptions(mission)].sort((a,b) => {
+    const missingA = a.filter(type => !modules.some(m => m.type === type)).length;
+    const missingB = b.filter(type => !modules.some(m => m.type === type)).length;
+    return missingA - missingB || a.length - b.length;
+  })[0];
 }
 
 export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, state: SimulationState, running: boolean) {
-  const paths = pathsFor(mission);
-  const first = paths[0];
+  const preferred = closestPrimaryPath(graph, mission);
+  const first = preferred;
 
   if (!graph.modules.size) {
     return { status: 'incomplete', message: 'Chọn ' + MODULES[first[0]].name + ' ở kho để bắt đầu.' };
   }
 
-  for (const required of paths) {
-    if (graph.findPathByTypes(required)) continue;
+  const matchedPrimary = matchedPrimaryPath(graph, mission);
+  if (!matchedPrimary) {
+    const missing = preferred.filter(type => ![...graph.modules.values()].some(m => m.type === type));
+    if (missing.length) {
+      const alternatives = mission.alternativePaths?.length
+        ? ' Có thể dùng một phương án khác nếu con muốn.'
+        : '';
+      return {
+        status: 'incomplete',
+        message: 'Cần thêm: ' + [...new Set(missing)].map(type => MODULES[type].name).join(', ') + '.' + alternatives,
+      };
+    }
 
+    for (let i = 0; i < preferred.length - 1; i++) {
+      if (!graph.findPathByTypes(preferred.slice(0, i + 2))) {
+        return {
+          status: 'incomplete',
+          message: 'Chưa nối đủ: ' + MODULES[preferred[i]].name + ' → ' + MODULES[preferred[i + 1]].name + '. Kéo đúng hai cổng cùng màu lại gần nhau.',
+        };
+      }
+    }
+  }
+
+  const sidePaths = mission.requiredPaths ?? [];
+  for (const required of sidePaths) {
+    if (graph.findPathByTypes(required)) continue;
     const missing = required.filter(type => ![...graph.modules.values()].some(m => m.type === type));
     if (missing.length) {
       return { status: 'incomplete', message: 'Cần thêm: ' + [...new Set(missing)].map(type => MODULES[type].name).join(', ') + '.' };
     }
-
     for (let i = 0; i < required.length - 1; i++) {
       if (!graph.findPathByTypes(required.slice(0, i + 2))) {
         return {
           status: 'incomplete',
-          message: 'Chưa nối đủ: ' + MODULES[required[i]].name + ' → ' + MODULES[required[i + 1]].name + '. Kéo đúng hai cổng cùng màu lại gần nhau.',
+          message: 'Chưa nối đủ: ' + MODULES[required[i]].name + ' → ' + MODULES[required[i + 1]].name + '.',
         };
       }
     }
@@ -50,6 +85,9 @@ export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, sta
     };
   }
 
+  const resolvedPrimary = matchedPrimary ?? preferred;
+  const paths = [resolvedPrimary, ...sidePaths];
+
   const controlsOn = paths.every(required =>
     graph.findPathByTypes(required, path =>
       path.every(m => (m.type !== 'switch' && m.type !== 'valve') || m.switchOn !== false)
@@ -70,7 +108,7 @@ export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, sta
     if (mission.id === 'pump') {
       return {
         status: 'inactive',
-        message: 'Bơm chưa có đủ điều kiện: cần mô tơ quay đúng bơm VÀ nước phải đi từ Bình nước → Ống → Bơm → Vòi phun.',
+        message: 'Bơm chưa có đủ điều kiện: cần truyền động quay và nước phải đi từ nguồn nước qua bơm tới vòi.',
       };
     }
     return {
@@ -79,7 +117,7 @@ export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, sta
     };
   }
 
-  const terminalType = mission.requiredPath[mission.requiredPath.length - 1];
+  const terminalType = resolvedPrimary[resolvedPrimary.length - 1];
   if (MODULES[terminalType]?.behavior.kind === 'vehicle') {
     const vehicles = [...graph.modules.values()].filter(m => m.type === terminalType);
     const runningVehicle = vehicles.find(v => vehicleCanTravel(graph, v.id, state.rpm).ready);
@@ -106,6 +144,7 @@ export const MISSIONS: Mission[] = [
     description: 'Ráp Pin → Công tắc → Đèn rồi bật công tắc.',
     lesson: 'Dòng điện chỉ chạy khi mạch được nối đúng và công tắc đóng.',
     requiredPath: ['battery', 'switch', 'lamp'],
+    alternativePaths: [['solar', 'switch', 'lamp']],
     success: 'Đèn đã sáng. Điện đi từ pin qua công tắc tới bóng đèn.',
   },
   {
@@ -113,6 +152,7 @@ export const MISSIONS: Mission[] = [
     description: 'Ráp Pin → Công tắc → Mô tơ → Trục → Cánh quạt.',
     lesson: 'Mô tơ đổi điện năng thành chuyển động quay, trục truyền mô-men tới cánh quạt.',
     requiredPath: ['battery', 'switch', 'motor', 'shaft', 'fan'],
+    alternativePaths: [['hand-crank', 'shaft', 'fan']],
     success: 'Quạt đang quay quanh đúng trục và tạo tiếng gió.',
   },
   {
@@ -120,6 +160,7 @@ export const MISSIONS: Mission[] = [
     description: 'Ráp Pin → Công tắc → Mô tơ → Trục → Mũi khoan.',
     lesson: 'Mũi khoan phải quay quanh trục dọc của chính nó để tạo tác dụng cắt.',
     requiredPath: ['battery', 'switch', 'motor', 'shaft', 'drill'],
+    alternativePaths: [['hand-crank', 'shaft', 'drill']],
     success: 'Mũi khoan đang xoay đúng trục và phát âm thanh máy khoan.',
   },
   {
