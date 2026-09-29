@@ -527,8 +527,11 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
       lamp.position.set(1.15, .32, z); g.add(lamp);
     }
     for (const x of [-.75, .78]) for (const z of [-.69, .69]) {
-      const wr = rotorZ(g);
-      wr.position.set(x, -.05, z);
+      const parent = new THREE.Group();
+      parent.position.set(x, -.05, z);
+      if (x > 0) parent.userData.steerGroup = true;
+      g.add(parent);
+      const wr = rotorZ(parent);
       const tire = mesh(new THREE.CylinderGeometry(.32, .32, .22, 22), std(0x242b30));
       tire.rotation.x = Math.PI / 2; wr.add(tire);
       const hub = mesh(new THREE.CylinderGeometry(.12, .12, .24, 18), std(0xc5d0d7, .4));
@@ -964,7 +967,11 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     const cab=mesh(new THREE.BoxGeometry(.9,.82,1.02),std(0xe65b54)); cab.position.set(.72,.45,0); cab.userData.vehicleBody=true; g.add(cab);
     const tank=mesh(new THREE.BoxGeometry(1.1,.68,.98),std(0xf4f6f7,.05)); tank.position.set(-.5,.38,0); tank.userData.vehicleBody=true; g.add(tank);
     const ladder=mesh(new THREE.BoxGeometry(1.75,.08,.18),std(0xb9c4ca,.35)); ladder.position.set(-.2,.87,0); ladder.rotation.z=.08; g.add(ladder);
-    for (const x of [-.75,.75]) for (const z of [-.64,.64]) { const wr=rotorZ(g); wr.position.set(x,-.32,z); const tire=mesh(new THREE.CylinderGeometry(.27,.27,.16,18),std(0x24292d)); tire.rotation.x=Math.PI/2; wr.add(tire); }
+    for (const x of [-.75,.75]) for (const z of [-.64,.64]) {
+      const parent=new THREE.Group(); parent.position.set(x,-.32,z); if(x>.2) parent.userData.steerGroup=true; g.add(parent);
+      const wr=rotorZ(parent);
+      const tire=mesh(new THREE.CylinderGeometry(.27,.27,.16,18),std(0x24292d)); tire.rotation.x=Math.PI/2; wr.add(tire);
+    }
     for (const z of [-.24,.24]) { const light=mesh(new THREE.SphereGeometry(.1,12,8),std(z<0?0x327dff:0xff3d3d)); light.position.set(.35,.92,z); light.userData.sirenLight=true; light.userData.sirenPhase=z<0?0:Math.PI; g.add(light); }
   }
 
