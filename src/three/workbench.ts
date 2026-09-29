@@ -364,6 +364,43 @@ export class Workbench {
 
   removeSelected() { if (!this.selectedId || !this.hooks.canEdit()) return; this.finishDrag(true); this.graph.removeModule(this.selectedId); const o = this.objects.get(this.selectedId); if (o) this.root.remove(o); this.objects.delete(this.selectedId); this.refreshConnectionVisuals(); this.select(null); this.hooks.onGraphChanged(); }
 
+  duplicateSelected() {
+    if (!this.selectedId || !this.hooks.canEdit()) return;
+    const source = this.graph.modules.get(this.selectedId);
+    if (!source) return;
+    const copy: ModuleInstance = {
+      ...source,
+      id: source.type + '-' + crypto.randomUUID().slice(0,8),
+      position: [source.position[0] + 1.5, source.position[1], source.position[2] + 1.5],
+      custom: source.custom ? JSON.parse(JSON.stringify(source.custom)) : undefined,
+    };
+    this.addInstance(copy,null);
+  }
+
+  disconnectSelectedPort(portId: string) {
+    if (!this.selectedId || !this.hooks.canEdit()) return;
+    this.graph.disconnectPort(this.selectedId,portId);
+    this.refreshConnectionVisuals();
+    this.refreshPorts();
+    this.hooks.onGraphChanged();
+  }
+
+  sculptSelected(delta: number) {
+    if (!this.selectedId || !this.hooks.canEdit()) return;
+    const module = this.graph.modules.get(this.selectedId);
+    const object = this.objects.get(this.selectedId);
+    if (!module || !object) return;
+    const terrain = new Set(['grass-tile','soil-tile','water-tile','river-tile','sea-tile','hill','mountain','island','waterfall','cave']);
+    if (!terrain.has(module.type)) return;
+    this.graph.disconnectModule(module.id);
+    const nextY = THREE.MathUtils.clamp(Math.round((module.position[1] + delta) * 4) / 4,-1.35,5.5);
+    module.position = [module.position[0],nextY,module.position[2]];
+    object.position.set(...module.position);
+    this.refreshConnectionVisuals();
+    this.refreshPorts();
+    this.hooks.onGraphChanged();
+  }
+
   rotateSelected() {
     if (!this.selectedId || !this.hooks.canEdit()) return; const m = this.graph.modules.get(this.selectedId), o = this.objects.get(this.selectedId); if (!m || !o) return;
     this.finishDrag(true); this.graph.disconnectModule(m.id); m.rotationY = (m.rotationY + Math.PI / 2) % (Math.PI * 2); o.rotation.y = m.rotationY;
