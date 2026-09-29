@@ -332,6 +332,166 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     size: [1.1, .8, 1.0], ports: [], behavior: { kind: 'structure' },
   },
 
+  airplane: {
+    type: 'airplane', name: 'Máy bay cánh quạt', icon: '✈️', category: 'vehicle',
+    description: 'Máy bay nhỏ nhận truyền động để quay cánh quạt và chạy đà.', science: 'Cánh tạo lực nâng khi không khí đi qua; cánh quạt tạo lực đẩy.',
+    size: [2.9, .85, 2.55], ports: [{ ...LR.rotationIn, position: [-1.55, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: 1.45 },
+  },
+  helicopter: {
+    type: 'helicopter', name: 'Trực thăng', icon: '🚁', category: 'vehicle',
+    description: 'Trực thăng có rô-to chính và rô-to đuôi.', science: 'Rô-to chính tạo lực nâng; rô-to đuôi cân bằng mô-men quay thân.',
+    size: [2.8, 1.25, 1.3], ports: [{ ...LR.rotationIn, position: [-1.48, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: 1.15 },
+  },
+  boat: {
+    type: 'boat', name: 'Tàu thủy', icon: '🚤', category: 'vehicle',
+    description: 'Thuyền máy chạy bằng chân vịt.', science: 'Chân vịt đẩy nước về sau, tạo phản lực đưa thuyền tiến về trước.',
+    size: [2.8, 1.05, 1.35], ports: [{ ...LR.rotationIn, position: [-1.5, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: .92 },
+  },
+  crane: {
+    type: 'crane', name: 'Cần cẩu', icon: '🏗️', category: 'vehicle',
+    description: 'Xe cần cẩu có cần nâng và móc tải.', science: 'Tời cuốn dây và hệ cần tạo lợi thế cơ học để nâng tải.',
+    size: [2.55, 1.4, 1.35], ports: [{ ...LR.rotationIn, position: [-1.38, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: .55 },
+  },
+  excavator: {
+    type: 'excavator', name: 'Máy xúc', icon: '🚜', category: 'vehicle',
+    description: 'Máy xúc có cần, tay gầu và gầu xúc.', science: 'Cơ cấu tay đòn khuếch đại lực để đào và nâng đất.',
+    size: [2.65, 1.35, 1.4], ports: [{ ...LR.rotationIn, position: [-1.42, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: .5 },
+  },
+  bulldozer: {
+    type: 'bulldozer', name: 'Máy ủi', icon: '🚜', category: 'vehicle',
+    description: 'Máy xích có lưỡi ủi phía trước.', science: 'Lưỡi ủi truyền lực kéo lớn vào đất để đẩy và san phẳng.',
+    size: [2.7, 1.2, 1.45], ports: [{ ...LR.rotationIn, position: [-1.45, 0, 0] }], behavior: { kind: 'vehicle', vehicleSpeed: .48 },
+  },
+  firetruck: {
+    type: 'firetruck', name: 'Xe cứu hỏa', icon: '🚒', category: 'vehicle',
+    description: 'Xe cứu hỏa vừa chạy vừa có hệ thống bơm nước.', science: 'Động cơ truyền lực cho bánh xe; bơm tăng áp để đẩy nước qua vòi phun.',
+    size: [2.9, 1.35, 1.45],
+    ports: [
+      { ...LR.rotationIn, position: [-1.55, 0, 0] },
+      { ...LR.fluidIn, position: [0, 0, -.82] },
+      { ...LR.fluidOut, position: [0, 0, .82] },
+    ],
+    behavior: { kind: 'vehicle', vehicleSpeed: 1.0 },
+  },
+
+  runway: {
+    type: 'runway', name: 'Đường băng', icon: '🛫', category: 'transport',
+    description: 'Đường băng cho máy bay chạy đà và hạ cánh.', science: 'Máy bay cần đủ vận tốc tương đối với không khí để cánh tạo lực nâng.',
+    size: [2.6, .1, 4.2], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 2.7] })), behavior: { kind: 'structure' },
+  },
+  helipad: {
+    type: 'helipad', name: 'Bãi đáp trực thăng', icon: '🅷', category: 'transport',
+    description: 'Bãi đáp dành cho trực thăng.', science: 'Bãi đáp phẳng và thoáng giúp rô-to hoạt động an toàn.',
+    size: [2.8, .1, 2.8], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.75, 0, p.position[2] * 1.75] })), behavior: { kind: 'structure' },
+  },
+  harbor: {
+    type: 'harbor', name: 'Bến cảng', icon: '⚓', category: 'transport',
+    description: 'Khu vực đón tàu thuyền bên mặt nước.', science: 'Cảng tạo vùng neo đậu và kết nối vận tải thủy với đất liền.',
+    size: [2.8, .35, 2.2], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.7, 0, p.position[2] * 1.35] })), behavior: { kind: 'structure' },
+  },
+  dock: {
+    type: 'dock', name: 'Cầu tàu', icon: '🪵', category: 'transport',
+    description: 'Cầu nhỏ vươn ra mặt nước để lên xuống tàu.', science: 'Cầu tàu truyền tải trọng người và hàng xuống cọc hoặc phao.',
+    size: [1.4, .28, 3.0], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.9] })), behavior: { kind: 'structure' },
+  },
+
+  'floor-slab': {
+    type: 'floor-slab', name: 'Sàn tầng', icon: '▱', category: 'building',
+    description: 'Tấm sàn để xây nhà nhiều tầng.', science: 'Sàn truyền tải trọng sử dụng sang dầm, tường hoặc cột.',
+    size: [2.2, .18, 2.2], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] })), behavior: { kind: 'structure' },
+  },
+  stairs: {
+    type: 'stairs', name: 'Cầu thang', icon: '🪜', category: 'building',
+    description: 'Cầu thang nối các cao độ trong nhà.', science: 'Bậc thang chia chênh cao thành nhiều bước nhỏ để di chuyển an toàn.',
+    size: [1.2, 1.25, 2.0], ports: [], behavior: { kind: 'structure' },
+  },
+  balcony: {
+    type: 'balcony', name: 'Ban công', icon: '🏠', category: 'building',
+    description: 'Sàn nhô ra ngoài mặt nhà.', science: 'Ban công làm việc như một phần kết cấu công-xôn hoặc được đỡ bằng cột.',
+    size: [1.7, .35, 1.1], ports: STRUCT_X, behavior: { kind: 'structure' },
+  },
+  door: {
+    type: 'door', name: 'Cửa mở', icon: '🚪', category: 'building',
+    description: 'Cánh cửa độc lập để bố trí trong công trình.', science: 'Bản lề tạo trục quay cho cánh cửa đóng mở.',
+    size: [.95, 1.65, .12], ports: [], behavior: { kind: 'structure' },
+  },
+  chair: {
+    type: 'chair', name: 'Ghế', icon: '🪑', category: 'building',
+    description: 'Ghế nội thất.', science: 'Bốn chân hoặc khung ghế phân bố tải người xuống sàn.',
+    size: [.75, 1.0, .75], ports: [], behavior: { kind: 'structure' },
+  },
+  table: {
+    type: 'table', name: 'Bàn', icon: '🟫', category: 'building',
+    description: 'Bàn nội thất.', science: 'Mặt bàn chịu tải và truyền lực xuống chân bàn.',
+    size: [1.35, .8, .85], ports: [], behavior: { kind: 'structure' },
+  },
+  sofa: {
+    type: 'sofa', name: 'Sofa', icon: '🛋️', category: 'building',
+    description: 'Ghế sofa cho phòng khách.', science: 'Khung và đệm phân bố áp lực để ngồi thoải mái.',
+    size: [1.75, .85, .85], ports: [], behavior: { kind: 'structure' },
+  },
+  bed: {
+    type: 'bed', name: 'Giường', icon: '🛏️', category: 'building',
+    description: 'Giường ngủ.', science: 'Khung giường đỡ đệm và phân bố tải xuống sàn.',
+    size: [1.5, .55, 2.05], ports: [], behavior: { kind: 'structure' },
+  },
+  kitchen: {
+    type: 'kitchen', name: 'Bếp', icon: '🍳', category: 'building',
+    description: 'Cụm tủ bếp và mặt bếp.', science: 'Khu bếp tổ chức các vùng lưu trữ, chuẩn bị và nấu ăn theo quy trình.',
+    size: [1.7, 1.0, .65], ports: [], behavior: { kind: 'structure' },
+  },
+  bookshelf: {
+    type: 'bookshelf', name: 'Tủ sách', icon: '📚', category: 'building',
+    description: 'Tủ nhiều tầng để sách và đồ vật.', science: 'Các đợt ngang truyền tải xuống hai vách đứng của tủ.',
+    size: [1.3, 1.65, .42], ports: [], behavior: { kind: 'structure' },
+  },
+  streetlight: {
+    type: 'streetlight', name: 'Đèn đường', icon: '💡', category: 'building',
+    description: 'Cột đèn cho đường phố.', science: 'Đèn đặt cao giúp phân bố ánh sáng trên diện tích rộng hơn.',
+    size: [.55, 2.2, .55], ports: [], behavior: { kind: 'structure' },
+  },
+  'traffic-light': {
+    type: 'traffic-light', name: 'Đèn giao thông', icon: '🚦', category: 'building',
+    description: 'Đèn tín hiệu cho nút giao.', science: 'Tín hiệu màu phân chia quyền đi theo thời gian để giảm xung đột giao thông.',
+    size: [.65, 2.0, .65], ports: [], behavior: { kind: 'structure' },
+  },
+  hydrant: {
+    type: 'hydrant', name: 'Trụ cứu hỏa', icon: '🧯', category: 'building',
+    description: 'Điểm lấy nước chữa cháy trong thành phố.', science: 'Trụ cứu hỏa nối với mạng cấp nước áp lực để lấy lưu lượng lớn.',
+    size: [.65, .9, .65], ports: [{ ...LR.fluidOut, position: [0, .15, .45] }], behavior: { kind: 'fluid-source' },
+  },
+
+  'sea-tile': {
+    type: 'sea-tile', name: 'Biển', icon: '🌊', category: 'nature',
+    description: 'Mảnh mặt biển để tạo vùng nước lớn.', science: 'Sóng mặt biển hình thành do gió truyền năng lượng cho mặt nước.',
+    size: [3.0, .08, 3.0], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.9, 0, p.position[2] * 1.9] })), behavior: { kind: 'structure' },
+  },
+  island: {
+    type: 'island', name: 'Đảo', icon: '🏝️', category: 'nature',
+    description: 'Mảnh đảo nổi giữa vùng nước.', science: 'Đảo là phần đất được nước bao quanh.',
+    size: [2.4, .65, 2.4], ports: [], behavior: { kind: 'structure' },
+  },
+  waterfall: {
+    type: 'waterfall', name: 'Thác nước', icon: '💦', category: 'nature',
+    description: 'Dòng nước đổ từ cao xuống thấp.', science: 'Thế năng trọng trường chuyển thành động năng khi nước rơi.',
+    size: [1.7, 2.0, 1.1], ports: [], behavior: { kind: 'structure' },
+  },
+  cave: {
+    type: 'cave', name: 'Hang động', icon: '🕳️', category: 'nature',
+    description: 'Hang đá để tạo địa hình khám phá.', science: 'Hang động thường hình thành do nước hòa tan hoặc xói mòn đá trong thời gian dài.',
+    size: [2.3, 1.65, 1.8], ports: [], behavior: { kind: 'structure' },
+  },
+  bush: {
+    type: 'bush', name: 'Bụi cây', icon: '🌿', category: 'nature',
+    description: 'Bụi cây thấp cho cảnh quan.', science: 'Thực vật thấp giúp che phủ đất và tạo nơi sống cho sinh vật nhỏ.',
+    size: [1.0, .75, 1.0], ports: [], behavior: { kind: 'structure' },
+  },
+  flower: {
+    type: 'flower', name: 'Khóm hoa', icon: '🌼', category: 'nature',
+    description: 'Hoa trang trí công viên và sân vườn.', science: 'Hoa giúp cây sinh sản và thu hút côn trùng thụ phấn.',
+    size: [.75, .65, .75], ports: [], behavior: { kind: 'structure' },
+  },
+
   chassis: {
     type: 'chassis', name: 'Khung máy', icon: '▰', category: 'structure',
     description: 'Nền cơ khí để bố trí các bộ phận.', science: 'Kết cấu chịu tải và giữ hình học của máy.',
@@ -348,5 +508,9 @@ export const PALETTE: ModuleType[] = [
   'car-base', 'motorcycle-base', 'train-engine', 'train-wagon',
   'road-straight', 'road-curve', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge',
   'foundation', 'wall', 'door-wall', 'window-wall', 'roof', 'column', 'fence', 'chassis',
-  'grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'hill', 'mountain', 'tree', 'cloud', 'rock',
+  'airplane', 'helicopter', 'boat', 'crane', 'excavator', 'bulldozer', 'firetruck',
+  'runway', 'helipad', 'harbor', 'dock',
+  'foundation', 'floor-slab', 'wall', 'door-wall', 'window-wall', 'roof', 'stairs', 'balcony', 'door', 'column', 'fence',
+  'chair', 'table', 'sofa', 'bed', 'kitchen', 'bookshelf', 'streetlight', 'traffic-light', 'hydrant',
+  'grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'sea-tile', 'island', 'waterfall', 'cave', 'hill', 'mountain', 'tree', 'bush', 'flower', 'cloud', 'rock',
 ];
