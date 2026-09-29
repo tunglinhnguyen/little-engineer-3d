@@ -1223,7 +1223,9 @@ export class Workbench {
     for (const child of this.energyLayer.children) {
       const line = child as THREE.Line;
       const material = line.material;
-      if (material instanceof THREE.LineDashedMaterial) material.dashOffset -= dt * 1.4;
+      if (material instanceof THREE.LineDashedMaterial) {
+        material.opacity = .72 + Math.sin(now * .008 + child.id) * .22;
+      }
     }
 
     this.frameTimes.push(dt);
