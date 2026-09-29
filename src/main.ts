@@ -167,7 +167,7 @@ const workbench = new Workbench(canvas, graph, {
   onGraphChanged: () => {
     recordHistory();
     saveQuietly(); renderInspector(workbench.selectedId);
-    if (mode === 'run') evaluateRun(); else updateMissionHint();
+    if (mode === 'run') evaluateRun(); else { updateMissionHint(); updateProgress(); }
   },
 });
 workbench.rebuildFromGraph();
