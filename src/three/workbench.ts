@@ -138,6 +138,7 @@ export class Workbench {
   }
 
   private registerTap(id: string, e: PointerEvent) {
+    if (!this.lastTapPoint) this.lastTapPoint = new THREE.Vector2();
     const now = performance.now();
     const point = new THREE.Vector2(e.clientX, e.clientY);
     const isDouble = this.lastTapId === id && now - this.lastTapAt < 380 && point.distanceTo(this.lastTapPoint) < 28;
