@@ -4,6 +4,7 @@ import { MODULES } from '../core/moduleRegistry';
 import { ConnectionGraph, modulePortsCompatible } from '../core/connectionGraph';
 import { buildVehicleRoute, routeKindForVehicle } from '../core/worldRoutes';
 import { vehicleInfrastructureStatus } from '../core/vehicleRules';
+import { collisionsFor } from '../core/physics';
 import type { Connection, ModuleInstance } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
 
@@ -30,6 +31,8 @@ export class Workbench {
   private dragModuleId: string | null = null;
   private dragStart = new THREE.Vector2(); private dragOrigin = new THREE.Vector3();
   private dragConnections: Connection[] = [];
+  private dragInvalid = false;
+  private snapGhost: THREE.Group | null = null;
   private lastTapId: string | null = null;
   private lastTapAt = 0;
   private lastTapPoint = new THREE.Vector2();
@@ -126,6 +129,73 @@ export class Workbench {
     old.map = new THREE.CanvasTexture(sign);
     old.map.colorSpace = THREE.SRGBColorSpace;
     old.needsUpdate = true;
+  }
+
+  private clearSnapGhost() {
+    if (!this.snapGhost) return;
+    this.scene.remove(this.snapGhost);
+    this.snapGhost.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const material = mesh.material;
+      if (Array.isArray(material)) material.forEach(m => m.dispose());
+      else material?.dispose?.();
+    });
+    this.snapGhost = null;
+  }
+
+  private showSnapGhost(instance: ModuleInstance, preview: { position: [number, number, number]; rotationY: number } | null) {
+    if (!preview) {
+      this.clearSnapGhost();
+      return;
+    }
+    if (!this.snapGhost || this.snapGhost.userData.type !== instance.type) {
+      this.clearSnapGhost();
+      const ghostInstance: ModuleInstance = { ...instance, position: preview.position, rotationY: preview.rotationY };
+      const ghost = createModuleObject(ghostInstance);
+      ghost.userData.type = instance.type;
+      ghost.userData.snapGhost = true;
+      ghost.traverse(child => {
+        if (child.userData.moduleLabel || child.userData.isPortVisual) child.visible = false;
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const material = mesh.material;
+        if (material instanceof THREE.MeshStandardMaterial) {
+          mesh.material = material.clone();
+          (mesh.material as THREE.MeshStandardMaterial).transparent = true;
+          (mesh.material as THREE.MeshStandardMaterial).opacity = .24;
+          (mesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x2dcf7b);
+          (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = .28;
+          mesh.castShadow = false;
+        } else if (material instanceof THREE.MeshBasicMaterial) {
+          mesh.material = material.clone();
+          (mesh.material as THREE.MeshBasicMaterial).transparent = true;
+          (mesh.material as THREE.MeshBasicMaterial).opacity = .18;
+        }
+      });
+      this.scene.add(ghost);
+      this.snapGhost = ghost;
+    }
+    this.snapGhost.position.set(...preview.position);
+    this.snapGhost.rotation.y = preview.rotationY;
+  }
+
+  private setPlacementFeedback(object: THREE.Group, invalid: boolean) {
+    object.traverse(child => {
+      if (!(child as THREE.Mesh).isMesh || child.userData.isPortVisual) return;
+      const material = (child as THREE.Mesh).material;
+      if (!(material instanceof THREE.MeshStandardMaterial)) return;
+      if (invalid) {
+        material.emissive.setHex(0xd64545);
+        material.emissiveIntensity = .55;
+      } else if (object.userData.moduleId === this.selectedId) {
+        material.emissive.setHex(0x173049);
+        material.emissiveIntensity = .12;
+      } else {
+        material.emissive.setHex(0x000000);
+        material.emissiveIntensity = 0;
+      }
+    });
   }
 
   addInstance(instance: ModuleInstance, attachToId: string | null = null) {
@@ -420,10 +490,11 @@ export class Workbench {
       o.position.set(Math.round(point.x * 4) / 4, this.dragOrigin.y, Math.round(point.z * 4) / 4);
       const m = this.graph.modules.get(this.dragModuleId)!;
       m.position = [o.position.x, o.position.y, o.position.z];
-      if (this.graph.magnetizeModule(m.id, .62)) {
-        o.position.set(...m.position);
-        o.rotation.y = m.rotationY;
-      }
+
+      const preview = this.graph.previewSnap(m.id, .82);
+      this.showSnapGhost(m, preview);
+      this.dragInvalid = collisionsFor(m, this.graph.modules.values()).length > 0 && !preview;
+      this.setPlacementFeedback(o, this.dragInvalid);
       this.refreshPorts();
     });
     this.canvas.addEventListener('pointerup', e => {
@@ -460,15 +531,20 @@ export class Workbench {
     this.dragPointerId = null; this.dragModuleId = null; this.dragging = false; this.controls.enabled = !this.cameraLocked;
     const m = id ? this.graph.modules.get(id) : undefined, o = id ? this.objects.get(id) : undefined;
     if (changed && m && o) {
-      if (cancelled) {
+      if (cancelled || this.dragInvalid) {
         m.position = this.dragOrigin.toArray();
         for (const c of this.dragConnections) {
           if (this.graph.modules.has(c.fromModuleId) && this.graph.modules.has(c.toModuleId)) this.graph.connect(c);
         }
       } else this.graph.snapModule(m.id);
       o.position.set(...m.position);
+      this.setPlacementFeedback(o, false);
     }
-    this.dragConnections = []; this.refreshConnectionVisuals(); this.refreshPorts();
+    this.dragConnections = [];
+    this.dragInvalid = false;
+    this.clearSnapGhost();
+    this.refreshConnectionVisuals();
+    this.refreshPorts();
     if (this.canvas.hasPointerCapture(pointerId)) this.canvas.releasePointerCapture(pointerId);
     if (changed && m) this.hooks.onGraphChanged();
   }
