@@ -8,6 +8,7 @@ import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
 import { SoundEngine } from './ui/sound';
 import { vehicleCanTravel } from './core/vehicleRules';
+import { buildVehicleRoute, routeKindForVehicle } from './core/worldRoutes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
