@@ -5,6 +5,7 @@ import { MODULES } from '../src/core/moduleRegistry';
 import { SimulationEngine } from '../src/core/simulation';
 import { getMissionFeedback, MISSIONS } from '../src/core/missions';
 import { Workbench } from '../src/three/workbench';
+import { buildVehicleRoute, routeKindForVehicle } from '../src/core/worldRoutes';
 import type { Connection, ModuleInstance, ModuleType } from '../src/core/types';
 
 const module = (id: string, type: ModuleType, switchOn = true): ModuleInstance => ({ id, type, position: [0, 0, 0], rotationY: 0, switchOn });
@@ -156,6 +157,43 @@ function pointerHarness(editable = true) {
   const send = (type: string, x = 100, y = 100, pointerId = 1) => canvas.dispatchEvent(Object.assign(new Event(type), { clientX: x, clientY: y, button: 0, pointerId }));
   return { graph, sw, lamp, send, controls, hooks, workbench };
 }
+
+describe('world route planner', () => {
+  it('classifies vehicle infrastructure correctly', () => {
+    expect(routeKindForVehicle('car-base')).toBe('road');
+    expect(routeKindForVehicle('train-engine')).toBe('rail');
+    expect(routeKindForVehicle('airplane')).toBe('runway');
+    expect(routeKindForVehicle('boat')).toBe(null);
+  });
+
+  it('builds a continuous road route from snapped road pieces', () => {
+    const g = new ConnectionGraph();
+    const car = module('route-car', 'car-base');
+    car.position = [0, .65, -2.4];
+    const a = module('road-a', 'road-straight');
+    a.position = [0, .65, 0];
+    const b = module('road-b', 'road-straight');
+    b.position = [0, .65, 2.88];
+    [car, a, b].forEach(m => g.addModule(m));
+    expect(g.snapModule(b.id)).toBe(true);
+    const route = buildVehicleRoute(g, car.id);
+    expect(route.length).toBeGreaterThanOrEqual(3);
+    expect(route[0][2]).toBeLessThan(route[route.length - 1][2]);
+  });
+
+  it('uses a single runway as a usable airplane route', () => {
+    const g = new ConnectionGraph();
+    const plane = module('route-plane', 'airplane');
+    plane.position = [0, .65, 0];
+    const runway = module('runway-one', 'runway');
+    runway.position = [0, .65, 0];
+    g.addModule(plane);
+    g.addModule(runway);
+    const route = buildVehicleRoute(g, plane.id);
+    expect(route).toHaveLength(3);
+    expect(Math.abs(route[2][2] - route[0][2])).toBeGreaterThan(3);
+  });
+});
 
 describe('vehicle and world-building missions', () => {
   it('completes the car mission only when the powered drivetrain and road both exist', () => {
