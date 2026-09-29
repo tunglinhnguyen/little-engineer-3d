@@ -98,14 +98,44 @@ export class ConnectionGraph {
   }
   serialize() {
     return {
-      version: 1,
+      version: 2,
       modules: [...this.modules.values()],
       connections: [...this.connections.values()],
     };
   }
-  restore(data: { modules?: ModuleInstance[]; connections?: Connection[] }) {
+  restore(data: { version?: number; modules?: ModuleInstance[]; connections?: Connection[] }) {
     this.modules.clear(); this.connections.clear();
-    for (const m of data.modules ?? []) if (MODULES[m.type]) this.modules.set(m.id, m);
-    for (const c of data.connections ?? []) if (this.modules.has(c.fromModuleId) && this.modules.has(c.toModuleId)) this.connections.set(c.id, c);
+
+    for (const m of data.modules ?? []) {
+      if (!MODULES[m.type] || !m.id || !Array.isArray(m.position) || m.position.length !== 3) continue;
+      this.modules.set(m.id, {
+        ...m,
+        position: [Number(m.position[0]) || 0, Number(m.position[1]) || .65, Number(m.position[2]) || 0],
+        rotationY: Number.isFinite(m.rotationY) ? m.rotationY : 0,
+        switchOn: m.type === 'switch' ? m.switchOn !== false : m.switchOn,
+      });
+    }
+
+    const addValidated = (c: Connection) => {
+      const from = this.modules.get(c.fromModuleId), to = this.modules.get(c.toModuleId);
+      if (!from || !to || from.id === to.id) return;
+      const fromPort = MODULES[from.type].ports.find(p => p.id === c.fromPortId);
+      const toPort = MODULES[to.type].ports.find(p => p.id === c.toPortId);
+      if (!fromPort || !toPort || !portsCompatible(fromPort, toPort)) return;
+      const normalized = normalizeConnection(from, fromPort, to, toPort);
+      if (!normalized || normalized.signal !== c.signal) return;
+      if (this.isPortUsed(normalized.fromModuleId, normalized.fromPortId) || this.isPortUsed(normalized.toModuleId, normalized.toPortId)) return;
+      this.connections.set(c.id || crypto.randomUUID(), { id: c.id || crypto.randomUUID(), ...normalized });
+    };
+
+    if ((data.version ?? 1) >= 2) {
+      for (const c of data.connections ?? []) addValidated(c);
+      return;
+    }
+
+    // v1 projects were saved by the old drag code, which could silently drop one
+    // side of a two-port module. Rebuild connections from the physical layout so
+    // existing users do not keep a visually assembled but electrically open machine.
+    for (const m of this.modules.values()) this.snapModule(m.id);
   }
 }
