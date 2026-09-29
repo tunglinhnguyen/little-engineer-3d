@@ -44,6 +44,14 @@ function rotorZ(group: THREE.Group, factor = 1) {
   group.add(rotor);
   return rotor;
 }
+function rotorY(group: THREE.Group, factor = 1) {
+  const rotor = new THREE.Group();
+  rotor.userData.rotor = true;
+  rotor.userData.rotorAxis = 'y';
+  rotor.userData.rotorFactor = factor;
+  group.add(rotor);
+  return rotor;
+}
 function addWaterEffect(group: THREE.Group, length = 1.45) {
   const fx = new THREE.Group();
   fx.userData.waterEffect = true;
@@ -661,6 +669,242 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     g.remove(body);
     const rock = mesh(new THREE.DodecahedronGeometry(.62, 0), std(0x7d858b, .16));
     rock.scale.set(1.15, .72, .95); g.add(rock);
+  }
+
+  if (instance.type === 'airplane') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    const fuselage = mesh(new THREE.CylinderGeometry(.32, .42, 2.45, 24), std(0xe9edf1, .18));
+    fuselage.rotation.z = Math.PI / 2; fuselage.userData.vehicleBody = true; g.add(fuselage);
+    const nose = mesh(new THREE.SphereGeometry(.38, 18, 12), std(0xd95f55, .12));
+    nose.position.x = 1.18; nose.scale.x = 1.35; nose.userData.vehicleBody = true; g.add(nose);
+    const wing = mesh(new THREE.BoxGeometry(.9, .12, 2.5), std(0x4d83b4, .12));
+    wing.position.x = .05; wing.userData.vehicleBody = true; g.add(wing);
+    const tailWing = mesh(new THREE.BoxGeometry(.5, .08, 1.15), std(0x4d83b4, .12));
+    tailWing.position.x = -1.0; tailWing.userData.vehicleBody = true; g.add(tailWing);
+    const fin = mesh(new THREE.BoxGeometry(.42, .8, .08), std(0x4d83b4, .12));
+    fin.position.set(-1.0, .36, 0); fin.userData.vehicleBody = true; g.add(fin);
+    const prop = rotorX(g, 1.8); prop.position.x = 1.52;
+    for (let i = 0; i < 3; i++) {
+      const blade = mesh(new THREE.BoxGeometry(.06, .86, .14), std(0x27323a));
+      blade.rotation.x = i * Math.PI / 3; prop.add(blade);
+    }
+    for (const x of [-.45, .65]) {
+      const wr = rotorZ(g); wr.position.set(x, -.42, 0);
+      const tire = mesh(new THREE.TorusGeometry(.17, .05, 8, 16), std(0x252a2e)); tire.rotation.x = Math.PI / 2; wr.add(tire);
+    }
+  }
+
+  if (instance.type === 'helicopter') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    const cabin = mesh(new THREE.SphereGeometry(.65, 22, 16), std(0x3f8fb0, .12));
+    cabin.scale.set(1.25, .82, .9); cabin.userData.vehicleBody = true; g.add(cabin);
+    const glass = mesh(new THREE.SphereGeometry(.46, 18, 12), new THREE.MeshStandardMaterial({ color: 0x8ed9f0, transparent: true, opacity: .55, roughness: .15 }));
+    glass.position.set(.35, .12, 0); glass.scale.set(.9,.7,.85); glass.userData.vehicleBody = true; g.add(glass);
+    const tail = mesh(new THREE.BoxGeometry(1.55, .16, .16), std(0x3f8fb0)); tail.position.x = -1.0; tail.userData.vehicleBody = true; g.add(tail);
+    const tailFin = mesh(new THREE.BoxGeometry(.18, .62, .08), std(0x3f8fb0)); tailFin.position.set(-1.72,.25,0); g.add(tailFin);
+    const main = rotorY(g, 1.4); main.position.y = .74;
+    for (let i = 0; i < 2; i++) {
+      const blade = mesh(new THREE.BoxGeometry(2.6, .045, .12), std(0x2e363d));
+      blade.rotation.y = i * Math.PI / 2; main.add(blade);
+    }
+    const tailRotor = rotorX(g, 2.4); tailRotor.position.set(-1.76,.22,0);
+    for (let i = 0; i < 2; i++) {
+      const blade = mesh(new THREE.BoxGeometry(.05,.58,.08), std(0x242b30)); blade.rotation.x = i * Math.PI / 2; tailRotor.add(blade);
+    }
+    for (const z of [-.38,.38]) {
+      const skid = mesh(new THREE.BoxGeometry(1.45,.06,.06), std(0x2c363d,.35));
+      skid.position.set(-.05,-.62,z); g.add(skid);
+    }
+  }
+
+  if (instance.type === 'boat') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    const hull = mesh(new THREE.BoxGeometry(2.5,.55,1.15), std(0x267fa4,.12));
+    hull.position.y = -.12; hull.scale.set(1,.8,1); hull.userData.vehicleBody = true; g.add(hull);
+    const bow = mesh(new THREE.ConeGeometry(.58,.8,4), std(0x267fa4,.12));
+    bow.rotation.z = -Math.PI/2; bow.rotation.y = Math.PI/4; bow.position.set(1.42,-.1,0); bow.userData.vehicleBody = true; g.add(bow);
+    const cabin = mesh(new THREE.BoxGeometry(.9,.55,.78), std(0xf0f3f4,.05));
+    cabin.position.set(.25,.45,0); cabin.userData.vehicleBody = true; g.add(cabin);
+    const prop = rotorX(g, 1.5); prop.position.set(-1.48,-.18,0);
+    for (let i=0;i<3;i++) { const blade=mesh(new THREE.BoxGeometry(.05,.42,.12),std(0xd7b45d,.25)); blade.rotation.x=i*Math.PI/3; prop.add(blade); }
+    const wake = mesh(new THREE.BoxGeometry(1.5,.025,.7), new THREE.MeshBasicMaterial({color:0xbfefff,transparent:true,opacity:.5}));
+    wake.position.set(-1.75,-.48,0); wake.userData.boatWake=true; wake.visible=false; g.add(wake);
+  }
+
+  if (instance.type === 'crane') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    const base = mesh(new THREE.BoxGeometry(2.2,.42,1.15), std(0xe0a52b,.18)); base.position.y=-.15; base.userData.vehicleBody=true; g.add(base);
+    const cabin = mesh(new THREE.BoxGeometry(.75,.72,.9), std(0xf0b437,.12)); cabin.position.set(-.55,.42,0); cabin.userData.vehicleBody=true; g.add(cabin);
+    for (const x of [-.72,.72]) for (const z of [-.62,.62]) { const wr=rotorZ(g); wr.position.set(x,-.32,z); const t=mesh(new THREE.CylinderGeometry(.25,.25,.16,18),std(0x242a2f)); t.rotation.x=Math.PI/2; wr.add(t); }
+    const pivot = new THREE.Group(); pivot.position.set(.2,.55,0); pivot.userData.craneBoom=true; g.add(pivot);
+    const boom = mesh(new THREE.BoxGeometry(2.35,.15,.18), std(0xf0b437,.16)); boom.position.x=1.0; boom.rotation.z=.45; pivot.add(boom);
+    const cable = mesh(new THREE.CylinderGeometry(.018,.018,1.15,8), std(0x30373b,.5)); cable.position.set(1.9,-.45,0); cable.userData.craneCable=true; pivot.add(cable);
+    const hook = mesh(new THREE.TorusGeometry(.13,.035,8,18,Math.PI*1.45), std(0x3a4248,.5)); hook.position.set(1.9,-1.02,0); hook.userData.craneHook=true; pivot.add(hook);
+  }
+
+  if (instance.type === 'excavator') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    for (const z of [-.55,.55]) {
+      const track = mesh(new THREE.BoxGeometry(2.15,.38,.28), std(0x2b3034,.25)); track.position.set(-.15,-.35,z); track.userData.vehicleBody=true; g.add(track);
+    }
+    const deck = mesh(new THREE.BoxGeometry(1.45,.28,1.0),std(0xe0a52b)); deck.position.y=.02; deck.userData.vehicleBody=true; g.add(deck);
+    const cab = mesh(new THREE.BoxGeometry(.72,.85,.85),std(0xe9b73d)); cab.position.set(-.4,.55,0); cab.userData.vehicleBody=true; g.add(cab);
+    const armRoot = new THREE.Group(); armRoot.position.set(.25,.62,0); armRoot.userData.excavatorArm=true; g.add(armRoot);
+    const arm = mesh(new THREE.BoxGeometry(1.35,.16,.16),std(0xe9b73d)); arm.position.x=.62; arm.rotation.z=.45; armRoot.add(arm);
+    const fore = mesh(new THREE.BoxGeometry(1.0,.14,.14),std(0xe9b73d)); fore.position.set(1.35,-.2,0); fore.rotation.z=-.65; fore.userData.excavatorForearm=true; armRoot.add(fore);
+    const bucket = mesh(new THREE.BoxGeometry(.55,.42,.65),std(0xd99122,.18)); bucket.position.set(1.75,-.65,0); bucket.rotation.z=-.25; bucket.userData.excavatorBucket=true; armRoot.add(bucket);
+  }
+
+  if (instance.type === 'bulldozer') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    for (const z of [-.58,.58]) { const track=mesh(new THREE.BoxGeometry(2.05,.42,.3),std(0x2b3034,.25)); track.position.set(-.15,-.35,z); track.userData.vehicleBody=true; g.add(track); }
+    const bodyB=mesh(new THREE.BoxGeometry(1.55,.55,1.0),std(0xe2ad31)); bodyB.position.set(-.2,.12,0); bodyB.userData.vehicleBody=true; g.add(bodyB);
+    const cab=mesh(new THREE.BoxGeometry(.8,.8,.86),std(0xf0c34f)); cab.position.set(-.45,.72,0); cab.userData.vehicleBody=true; g.add(cab);
+    const blade=mesh(new THREE.BoxGeometry(.18,.82,1.55),std(0xb8c0c5,.3)); blade.position.set(1.12,-.02,0); blade.rotation.z=-.12; blade.userData.bulldozerBlade=true; g.add(blade);
+  }
+
+  if (instance.type === 'firetruck') {
+    g.remove(body);
+    g.userData.vehicle = true;
+    const base=mesh(new THREE.BoxGeometry(2.45,.38,1.15),std(0xd84d47,.16)); base.position.y=-.08; base.userData.vehicleBody=true; g.add(base);
+    const cab=mesh(new THREE.BoxGeometry(.9,.82,1.02),std(0xe65b54)); cab.position.set(.72,.45,0); cab.userData.vehicleBody=true; g.add(cab);
+    const tank=mesh(new THREE.BoxGeometry(1.1,.68,.98),std(0xf4f6f7,.05)); tank.position.set(-.5,.38,0); tank.userData.vehicleBody=true; g.add(tank);
+    const ladder=mesh(new THREE.BoxGeometry(1.75,.08,.18),std(0xb9c4ca,.35)); ladder.position.set(-.2,.87,0); ladder.rotation.z=.08; g.add(ladder);
+    for (const x of [-.75,.75]) for (const z of [-.64,.64]) { const wr=rotorZ(g); wr.position.set(x,-.32,z); const tire=mesh(new THREE.CylinderGeometry(.27,.27,.16,18),std(0x24292d)); tire.rotation.x=Math.PI/2; wr.add(tire); }
+    for (const z of [-.24,.24]) { const light=mesh(new THREE.SphereGeometry(.1,12,8),std(z<0?0x327dff:0xff3d3d)); light.position.set(.35,.92,z); light.userData.sirenLight=true; light.userData.sirenPhase=z<0?0:Math.PI; g.add(light); }
+  }
+
+  if (instance.type === 'runway') {
+    g.remove(body);
+    const slab=mesh(new THREE.BoxGeometry(2.55,.1,4.15),std(0x4b5155)); slab.position.y=-.55; g.add(slab);
+    for(let z=-1.6;z<=1.6;z+=.52){const dash=mesh(new THREE.BoxGeometry(.1,.025,.28),std(0xf7f7ed));dash.position.set(0,-.48,z);g.add(dash);}
+    for(const x of [-1.08,1.08]){const edge=mesh(new THREE.BoxGeometry(.06,.02,3.9),std(0xf7f7ed));edge.position.set(x,-.48,0);g.add(edge);}
+  }
+
+  if (instance.type === 'helipad') {
+    g.remove(body);
+    const pad=mesh(new THREE.CylinderGeometry(1.35,1.35,.1,36),std(0x596064)); pad.position.y=-.55; g.add(pad);
+    const ring=mesh(new THREE.TorusGeometry(.72,.055,8,36),std(0xffffff)); ring.rotation.x=Math.PI/2; ring.position.y=-.48; g.add(ring);
+    const h1=mesh(new THREE.BoxGeometry(.12,.025,.85),std(0xffffff)); h1.position.y=-.47; g.add(h1);
+    for(const x of [-.28,.28]){const h=mesh(new THREE.BoxGeometry(.12,.025,.85),std(0xffffff));h.position.set(x,-.47,0);g.add(h);}
+  }
+
+  if (instance.type === 'harbor' || instance.type === 'dock') {
+    g.remove(body);
+    const deck=mesh(new THREE.BoxGeometry(instance.type==='harbor'?2.7:1.3,.22,instance.type==='harbor'?2.1:2.9),std(0x9b734e));
+    deck.position.y=-.42; g.add(deck);
+    const zs=instance.type==='harbor'?[-.75,.75]:[-1.15,0,1.15];
+    for(const z of zs) for(const x of [-.48,.48]) { const post=mesh(new THREE.CylinderGeometry(.07,.09,.9,10),std(0x745238)); post.position.set(x,-.7,z); g.add(post); }
+    if(instance.type==='harbor'){ const bollard=mesh(new THREE.CylinderGeometry(.09,.12,.25,12),std(0x303a40)); bollard.position.set(.9,-.24,.65); g.add(bollard); }
+  }
+
+  if (instance.type === 'floor-slab') {
+    g.remove(body); const slab=mesh(new THREE.BoxGeometry(2.2,.18,2.2),std(0xcac4b9)); g.add(slab);
+  }
+
+  if (instance.type === 'stairs') {
+    g.remove(body);
+    for(let i=0;i<7;i++){const step=mesh(new THREE.BoxGeometry(1.15,.18,.32),std(0xc8b9a3));step.position.set(0,-.5+i*.18,-.82+i*.27);g.add(step);}
+  }
+
+  if (instance.type === 'balcony') {
+    g.remove(body); const slab=mesh(new THREE.BoxGeometry(1.7,.16,1.05),std(0xc9c4bb)); slab.position.y=-.28; g.add(slab);
+    for(const x of [-.72,.72]){const p=mesh(new THREE.BoxGeometry(.06,.72,.06),std(0x697781,.35));p.position.set(x,.08,.46);g.add(p);}
+    const rail=mesh(new THREE.BoxGeometry(1.5,.07,.07),std(0x697781,.35));rail.position.set(0,.42,.46);g.add(rail);
+  }
+
+  if (instance.type === 'door') {
+    g.remove(body); const d=mesh(new THREE.BoxGeometry(.88,1.58,.08),std(0x87542f)); g.add(d); const knob=mesh(new THREE.SphereGeometry(.06,10,8),std(0xd8b15a,.4)); knob.position.set(.3,0,.08);g.add(knob);
+  }
+
+  if (instance.type === 'chair') {
+    g.remove(body);
+    const seat=mesh(new THREE.BoxGeometry(.68,.12,.68),std(0x9c6b46));seat.position.y=0;g.add(seat);
+    const back=mesh(new THREE.BoxGeometry(.68,.72,.12),std(0x9c6b46));back.position.set(0,.38,-.29);g.add(back);
+    for(const x of [-.26,.26])for(const z of [-.26,.26]){const leg=mesh(new THREE.BoxGeometry(.08,.55,.08),std(0x765039));leg.position.set(x,-.32,z);g.add(leg);}
+  }
+
+  if (instance.type === 'table') {
+    g.remove(body); const top=mesh(new THREE.BoxGeometry(1.3,.12,.82),std(0xa87850));top.position.y=.2;g.add(top);
+    for(const x of [-.5,.5])for(const z of [-.28,.28]){const leg=mesh(new THREE.BoxGeometry(.09,.65,.09),std(0x765039));leg.position.set(x,-.15,z);g.add(leg);}
+  }
+
+  if (instance.type === 'sofa') {
+    g.remove(body); const seat=mesh(new THREE.BoxGeometry(1.7,.35,.75),std(0x6fa0b2));seat.position.y=-.1;g.add(seat);
+    const back=mesh(new THREE.BoxGeometry(1.7,.72,.22),std(0x6fa0b2));back.position.set(0,.3,-.3);g.add(back);
+    for(const x of [-.78,.78]){const arm=mesh(new THREE.BoxGeometry(.18,.5,.76),std(0x638d9d));arm.position.set(x,.08,0);g.add(arm);}
+  }
+
+  if (instance.type === 'bed') {
+    g.remove(body); const frame=mesh(new THREE.BoxGeometry(1.5,.24,2.0),std(0x8b654b));frame.position.y=-.28;g.add(frame);
+    const mattress=mesh(new THREE.BoxGeometry(1.42,.28,1.9),std(0xf2efe8));mattress.position.y=-.04;g.add(mattress);
+    const pillow=mesh(new THREE.BoxGeometry(.65,.16,.38),std(0xffffff));pillow.position.set(0,.16,-.68);g.add(pillow);
+  }
+
+  if (instance.type === 'kitchen') {
+    g.remove(body); const cabinet=mesh(new THREE.BoxGeometry(1.65,.9,.62),std(0xe2d5bd));cabinet.position.y=-.05;g.add(cabinet);
+    const counter=mesh(new THREE.BoxGeometry(1.72,.08,.68),std(0x62696e,.25));counter.position.y=.44;g.add(counter);
+    for(const x of [-.35,.15,.55]){const burner=mesh(new THREE.TorusGeometry(.11,.018,6,18),std(0x222a2f));burner.rotation.x=Math.PI/2;burner.position.set(x,.5,0);g.add(burner);}
+  }
+
+  if (instance.type === 'bookshelf') {
+    g.remove(body); const back=mesh(new THREE.BoxGeometry(1.28,1.62,.12),std(0x8a633f));g.add(back);
+    for(const y of [-.65,-.2,.25,.7]){const shelf=mesh(new THREE.BoxGeometry(1.3,.08,.38),std(0x9d7249));shelf.position.set(0,y,.12);g.add(shelf);}
+    for(let i=0;i<7;i++){const book=mesh(new THREE.BoxGeometry(.1,.34,.2),std([0xb95454,0x4f83b7,0x66a768,0xd4a84b][i%4]));book.position.set(-.45+i*.15,-.45+(i%3)*.45,.27);g.add(book);}
+  }
+
+  if (instance.type === 'streetlight') {
+    g.remove(body); const pole=mesh(new THREE.CylinderGeometry(.05,.07,1.9,12),std(0x4d5960,.35));pole.position.y=.15;g.add(pole);
+    const arm=mesh(new THREE.BoxGeometry(.55,.06,.06),std(0x4d5960,.35));arm.position.set(.23,1.08,0);g.add(arm);
+    const lamp=mesh(new THREE.SphereGeometry(.16,14,10),new THREE.MeshStandardMaterial({color:0xffe998,emissive:0xffc93d,emissiveIntensity:.7}));lamp.position.set(.48,1.03,0);g.add(lamp);
+  }
+
+  if (instance.type === 'traffic-light') {
+    g.remove(body); const pole=mesh(new THREE.CylinderGeometry(.05,.07,1.65,12),std(0x4c565c,.35));pole.position.y=.08;g.add(pole);
+    const box=mesh(new THREE.BoxGeometry(.34,.75,.28),std(0x263039));box.position.set(0,.72,0);g.add(box);
+    [0xff3b30,0xffcc00,0x34c759].forEach((color,i)=>{const light=mesh(new THREE.SphereGeometry(.09,12,8),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:i===2?.6:.08}));light.position.set(0,.94-i*.22,.16);g.add(light);});
+  }
+
+  if (instance.type === 'hydrant') {
+    g.remove(body); const base=mesh(new THREE.CylinderGeometry(.2,.25,.65,16),std(0xd84b42));base.position.y=-.05;g.add(base);
+    const cap=mesh(new THREE.CylinderGeometry(.24,.2,.18,16),std(0xe2554c));cap.position.y=.38;g.add(cap);
+    for(const z of [-.28,.28]){const outlet=mesh(new THREE.CylinderGeometry(.09,.11,.22,12),std(0xc5cdd1,.35));outlet.rotation.x=Math.PI/2;outlet.position.set(0,.12,z);g.add(outlet);}
+  }
+
+  if (instance.type === 'sea-tile') {
+    g.remove(body); const sea=mesh(new THREE.BoxGeometry(3,.08,3),new THREE.MeshStandardMaterial({color:0x34aede,transparent:true,opacity:.72,roughness:.16,metalness:.05}));
+    sea.position.y=-.55; sea.userData.waterSurface=true; sea.userData.waterBaseY=-.55; g.add(sea);
+  }
+
+  if (instance.type === 'island') {
+    g.remove(body); const sand=mesh(new THREE.CylinderGeometry(1.12,1.3,.36,22),std(0xd9c07b));sand.position.y=-.38;g.add(sand);
+    const grass=mesh(new THREE.CylinderGeometry(.8,1.0,.28,22),std(0x69a653));grass.position.y=-.08;g.add(grass);
+  }
+
+  if (instance.type === 'waterfall') {
+    g.remove(body); const cliff=mesh(new THREE.BoxGeometry(1.65,1.8,1.0),std(0x727d82,.15));cliff.position.y=.25;g.add(cliff);
+    const water=mesh(new THREE.BoxGeometry(.72,1.65,.06),new THREE.MeshBasicMaterial({color:0x51c2f1,transparent:true,opacity:.7}));water.position.set(0,.2,.54);water.userData.waterfall=true;g.add(water);
+    const pool=mesh(new THREE.CylinderGeometry(.72,.8,.08,24),new THREE.MeshStandardMaterial({color:0x42b9e7,transparent:true,opacity:.65}));pool.position.set(0,-.55,.78);g.add(pool);
+  }
+
+  if (instance.type === 'cave') {
+    g.remove(body);
+    const shell=mesh(new THREE.TorusGeometry(.82,.34,10,24,Math.PI),std(0x6f777c,.14));shell.rotation.x=Math.PI/2;shell.position.y=-.05;g.add(shell);
+    const floor=mesh(new THREE.BoxGeometry(1.85,.15,1.45),std(0x665f55));floor.position.y=-.55;g.add(floor);
+  }
+
+  if (instance.type === 'bush') {
+    g.remove(body); for(const p of [[0,0,0],[-.28,-.05,.1],[.28,-.05,.08],[0,.12,-.2]] as [number,number,number][]){const leaf=mesh(new THREE.SphereGeometry(.36,14,10),std(0x4f9547));leaf.position.set(...p);g.add(leaf);}
+  }
+
+  if (instance.type === 'flower') {
+    g.remove(body); for(let i=0;i<5;i++){const a=i/5*Math.PI*2;const stem=mesh(new THREE.CylinderGeometry(.025,.03,.45,8),std(0x4d9b4a));stem.position.set(Math.cos(a)*.18,-.2,Math.sin(a)*.18);g.add(stem);const bloom=mesh(new THREE.SphereGeometry(.1,10,8),std([0xffd45f,0xf483b7,0x8e7dff,0xff8c66,0xffffff][i]));bloom.position.set(Math.cos(a)*.18,.08,Math.sin(a)*.18);g.add(bloom);}
   }
 
   if (instance.type === 'chassis') {
