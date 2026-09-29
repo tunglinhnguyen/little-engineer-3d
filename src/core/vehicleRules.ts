@@ -13,7 +13,7 @@ export interface VehicleInfrastructureStatus {
   message: string;
 }
 
-const ROAD_NAMES = new Set<ModuleType>(['road-straight', 'road-curve', 'bridge']);
+const ROAD_NAMES = new Set<ModuleType>(['road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'bridge']);
 const WATER_NAMES = new Set<ModuleType>(['water-tile', 'river-tile', 'sea-tile']);
 
 function planarDistance(a: ModuleInstance, b: ModuleInstance) {
