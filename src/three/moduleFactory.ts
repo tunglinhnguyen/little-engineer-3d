@@ -166,9 +166,24 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
   g.userData.moduleId = instance.id;
   g.userData.type = instance.type;
 
-  const c = COLORS[instance.type] ?? 0x78909c, dark = 0x243746, light = 0xe9f0f4;
-  const body = mesh(new THREE.BoxGeometry(...def.size), std(c));
+  const c = instance.custom?.color ?? COLORS[instance.type] ?? 0x78909c, dark = 0x243746, light = 0xe9f0f4;
+  const visualSize = instance.custom?.size ?? def.size;
+  const body = mesh(new THREE.BoxGeometry(...visualSize), std(c));
   g.add(body);
+
+  if (instance.type === 'custom-block' || instance.type.startsWith('custom-')) {
+    g.remove(body);
+    const [sx, sy, sz] = visualSize;
+    const customBody = instance.custom?.shape === 'cylinder'
+      ? mesh(new THREE.CylinderGeometry(Math.max(.18, Math.min(sx, sz) * .48), Math.max(.18, Math.min(sx, sz) * .48), sy, 24), std(c, .14))
+      : mesh(new THREE.BoxGeometry(sx, sy, sz), std(c, .14));
+    g.add(customBody);
+    const rim = mesh(new THREE.BoxGeometry(Math.max(.2, sx * .82), .045, Math.max(.2, sz * .82)), std(0xffffff, .05));
+    rim.position.y = sy * .5 + .028;
+    rim.material.transparent = true;
+    (rim.material as THREE.MeshStandardMaterial).opacity = .38;
+    g.add(rim);
+  }
 
   if (instance.type === 'battery') {
     const plus = mesh(new THREE.CylinderGeometry(.08, .08, .16, 16), std(0xff6b66));
@@ -1111,7 +1126,7 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     }
   }
 
-  const label = labelSprite(def.name);
+  const label = labelSprite(instance.custom?.name?.trim() || def.name);
   label.visible = false;
   label.userData.moduleLabel = true;
   g.add(label);
