@@ -9,12 +9,23 @@ import { setSpeechEnabled, speak } from './ui/speech';
 import { SoundEngine } from './ui/sound';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
+const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
 app.innerHTML = `
   <canvas id="world"></canvas>
+  <section class="welcome-screen ${savedPlayerName ? 'hidden' : ''}" id="welcomeScreen">
+    <div class="welcome-card panel">
+      <div class="welcome-icon">🧑‍🔧</div>
+      <h1>Thế giới Kỹ sư 3D</h1>
+      <p>Con tên là gì? Nhập tên để bắt đầu xây máy, xe, đường sắt, nhà cửa và cả một thế giới của riêng con.</p>
+      <input id="playerNameInput" maxlength="18" autocomplete="off" placeholder="Tên của bé" />
+      <button id="enterWorldBtn">🚀 Vào thế giới của con</button>
+    </div>
+  </section>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b>Little Engineer 3D</b><small>Phòng thí nghiệm STEAM · v0.3.0</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.4.0</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
+      <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
       <button id="saveBtn" class="icon-btn" title="Lưu">💾</button><button id="resetBtn" class="icon-btn" title="Làm lại">↺</button>
     </div>
   </header>
@@ -27,7 +38,7 @@ app.innerHTML = `
     <div class="empty">Chạm một mô-đun để xem thông tin.</div>
   </aside>
   <nav class="camera-bar panel"><button data-camera="iso" class="active">◩ Chéo</button><button data-camera="top">▦ Trên</button><button data-camera="front">▤ Trước</button></nav>
-  <section class="palette panel"><div class="palette-title"><b>Kho mô-đun</b><span>29 mô-đun · chọn theo nhóm</span></div><div class="category-tabs" id="categoryTabs"></div><div class="parts" id="parts"></div></section>
+  <section class="palette panel"><div class="palette-title"><b>Kho mô-đun</b><span>${PALETTE.length} mô-đun · chọn theo nhóm</span></div><div class="category-tabs" id="categoryTabs"></div><div class="parts" id="parts"></div></section>
   <div class="coach" id="coach">Chọn một mô-đun ở kho phía dưới để bắt đầu.</div>
   <div class="toast hidden" id="toast"></div>
 `;
@@ -57,6 +68,33 @@ const workbench = new Workbench(canvas, graph, {
   },
 });
 workbench.rebuildFromGraph();
+
+const welcomeScreen = document.querySelector<HTMLElement>('#welcomeScreen')!;
+const playerNameInput = document.querySelector<HTMLInputElement>('#playerNameInput')!;
+const worldTitle = document.querySelector<HTMLElement>('#worldTitle')!;
+const enterWorldBtn = document.querySelector<HTMLButtonElement>('#enterWorldBtn')!;
+const nameBtn = document.querySelector<HTMLButtonElement>('#nameBtn')!;
+playerNameInput.value = savedPlayerName;
+
+function applyPlayerName(raw: string, announce = true) {
+  const clean = raw.trim().replace(/\s+/g, ' ').slice(0, 18) || 'Bé';
+  localStorage.setItem('le3d-player-name', clean);
+  playerNameInput.value = clean;
+  worldTitle.textContent = 'Thế giới của ' + clean;
+  workbench.setPlayerName(clean);
+  welcomeScreen.classList.add('hidden');
+  if (announce) speak('Chào ' + clean + '. Chào mừng con đến thế giới kỹ sư của mình. Hãy chọn mô đun để bắt đầu xây dựng.');
+}
+if (savedPlayerName) applyPlayerName(savedPlayerName, false);
+else workbench.setPlayerName('Bé');
+
+enterWorldBtn.onclick = () => applyPlayerName(playerNameInput.value);
+playerNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyPlayerName(playerNameInput.value); });
+nameBtn.onclick = () => {
+  playerNameInput.value = localStorage.getItem('le3d-player-name') ?? '';
+  welcomeScreen.classList.remove('hidden');
+  requestAnimationFrame(() => playerNameInput.focus());
+};
 
 function saveQuietly() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); }
 
@@ -104,7 +142,11 @@ const CATEGORY_META: Record<ModuleCategory | 'all', { label: string; icon: strin
   motion: { label: 'Truyền động', icon: '⚙️' },
   output: { label: 'Cơ cấu', icon: '🛠️' },
   fluid: { label: 'Nước', icon: '💧' },
-  structure: { label: 'Khung', icon: '🧱' },
+  structure: { label: 'Khung máy', icon: '🧱' },
+  vehicle: { label: 'Xe & tàu', icon: '🚗' },
+  transport: { label: 'Đường & ray', icon: '🛤️' },
+  building: { label: 'Xây nhà', icon: '🏠' },
+  nature: { label: 'Thiên nhiên', icon: '🌳' },
 };
 let activeCategory: ModuleCategory | 'all' = 'all';
 
@@ -120,7 +162,7 @@ function renderPalette() {
     parts.appendChild(b);
   }
 }
-for (const category of ['all', 'energy', 'control', 'motion', 'output', 'fluid', 'structure'] as const) {
+for (const category of ['all', 'energy', 'control', 'motion', 'output', 'fluid', 'vehicle', 'transport', 'building', 'nature', 'structure'] as const) {
   const b = document.createElement('button');
   b.className = 'category-tab' + (category === 'all' ? ' active' : '');
   b.textContent = CATEGORY_META[category].icon + ' ' + CATEGORY_META[category].label;
@@ -238,7 +280,7 @@ runBtn.onclick = async () => {
 };
 
 document.querySelector<HTMLButtonElement>('#saveBtn')!.onclick = save;
-document.querySelector<HTMLButtonElement>('#resetBtn')!.onclick = () => { graph.restore({ modules: [], connections: [] }); workbench.rebuildFromGraph(); saveQuietly(); setMode('build'); coach.textContent = 'Phòng lab đã được làm sạch. Bắt đầu một máy mới nhé!'; showToast('↺ Đã làm sạch bàn lắp ráp'); };
+document.querySelector<HTMLButtonElement>('#resetBtn')!.onclick = () => { graph.restore({ modules: [], connections: [] }); workbench.rebuildFromGraph(); saveQuietly(); setMode('build'); coach.textContent = 'Thế giới đã được làm sạch. Con có thể bắt đầu một công trình mới!'; showToast('↺ Đã làm sạch bàn lắp ráp'); };
 
 document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onclick = () => { document.querySelectorAll('[data-camera]').forEach(x => x.classList.remove('active')); b.classList.add('active'); workbench.setCamera(b.dataset.camera as 'iso' | 'top' | 'front'); });
 
@@ -280,7 +322,7 @@ document.body.appendChild(audioToggle);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-3', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-4', {
         scope: './',
         updateViaCache: 'none',
       });
