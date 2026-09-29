@@ -30,7 +30,11 @@ export class Workbench {
   private lastTapId: string | null = null;
   private lastTapAt = 0;
   private lastTapPoint = new THREE.Vector2();
-  private last = performance.now(); private running = false; private rpm = new Map<string, number>(); private active = new Set<string>();
+  private last = performance.now();
+  private running = false;
+  private rpm = new Map<string, number>();
+  private active = new Set<string>();
+  private fluid = new Set<string>();
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
@@ -73,11 +77,26 @@ export class Workbench {
   }
 
   toggleSwitch() {
-    if (!this.selectedId) return; const m = this.graph.modules.get(this.selectedId); if (!m || m.type !== 'switch') return;
-    m.switchOn = !(m.switchOn !== false); const old = this.objects.get(m.id); if (old) this.root.remove(old); const next = createModuleObject(m); this.root.add(next); this.objects.set(m.id, next); this.refreshPorts(); this.hooks.onGraphChanged();
+    if (!this.selectedId) return;
+    const m = this.graph.modules.get(this.selectedId);
+    if (!m || (m.type !== 'switch' && m.type !== 'valve')) return;
+    m.switchOn = !(m.switchOn !== false);
+    const old = this.objects.get(m.id);
+    if (old) this.root.remove(old);
+    const next = createModuleObject(m);
+    this.root.add(next);
+    this.objects.set(m.id, next);
+    this.refreshPorts();
+    this.hooks.onGraphChanged();
   }
 
-  setSimulation(running: boolean, rpm: Map<string, number>, active: Set<string>) { this.finishDrag(true); this.running = running; this.rpm = rpm; this.active = active; }
+  setSimulation(running: boolean, rpm: Map<string, number>, active: Set<string>, fluid: Set<string> = new Set()) {
+    this.finishDrag(true);
+    this.running = running;
+    this.rpm = rpm;
+    this.active = active;
+    this.fluid = fluid;
+  }
 
   cancelInteraction() { this.finishDrag(true); }
 
@@ -148,7 +167,7 @@ export class Workbench {
     if (!isDouble) return;
     this.lastTapId = null;
     const module = this.graph.modules.get(id);
-    if (module?.type === 'switch') {
+    if (module?.type === 'switch' || module?.type === 'valve') {
       this.select(id);
       this.toggleSwitch();
     }
@@ -178,32 +197,93 @@ export class Workbench {
 
   private resize() { const w = innerWidth, h = innerHeight; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   private loop(now: number) {
-    requestAnimationFrame(t => this.loop(t)); const dt = Math.min(.04, (now - this.last) / 1000); this.last = now;
-    if (this.running) for (const [id, speed] of this.rpm) { const o = this.objects.get(id); if (!o) continue; let rotor: THREE.Object3D | undefined; o.traverse(child => { if (!rotor && child.userData.rotor) rotor = child; }); const angle = speed / 60 * Math.PI * 2 * dt; if (rotor) rotor.rotation.x += angle; else o.rotation.x += 0; }
-    for (const [id, o] of this.objects) {
-      const m = this.graph.modules.get(id);
-      if (!m || (m.type !== 'lamp' && m.type !== 'led')) continue;
-      let bulb: THREE.Mesh | undefined;
-      o.traverse(child => {
-        if (!bulb && child.userData.lampBulb && (child as THREE.Mesh).isMesh) bulb = child as THREE.Mesh;
-      });
-      if (bulb?.material instanceof THREE.MeshStandardMaterial) {
-        const on = this.running && this.active.has(id);
-        bulb.material.emissive.setHex(on ? (m.type === 'led' ? 0x35ff73 : 0xffc928) : 0x000000);
-        bulb.material.emissiveIntensity = on ? 2.8 : 0;
+    requestAnimationFrame(t => this.loop(t));
+    const dt = Math.min(.04, (now - this.last) / 1000);
+    this.last = now;
+
+    if (this.running) {
+      for (const [id, speed] of this.rpm) {
+        const o = this.objects.get(id);
+        if (!o) continue;
+        const angle = speed / 60 * Math.PI * 2 * dt;
+        const rotors: THREE.Object3D[] = [];
+        o.traverse(child => { if (child.userData.rotor) rotors.push(child); });
+        for (const rotor of rotors) rotor.rotation.x += angle * (rotor.userData.rotorFactor ?? 1);
+
+        const phase = now / 1000 * Math.max(.8, Math.abs(speed) / 60) * Math.PI * 2;
+        o.traverse(child => {
+          if (child.userData.pistonRod) {
+            child.position.x = child.userData.pistonBaseX + Math.sin(phase) * .28;
+          }
+          if (child.userData.conveyorSlat) {
+            const base = child.userData.conveyorBaseX as number;
+            const travel = (now / 1000 * Math.sign(speed || 1) * Math.max(.12, Math.abs(speed) / 250)) % 1.8;
+            let x = base + travel;
+            while (x > .9) x -= 1.8;
+            while (x < -.9) x += 1.8;
+            child.position.x = x;
+          }
+        });
       }
     }
+
     for (const [id, o] of this.objects) {
       const m = this.graph.modules.get(id);
-      if (!m || m.type !== 'buzzer') continue;
-      let cap: THREE.Object3D | undefined;
-      o.traverse(child => { if (!cap && child.userData.buzzerCap) cap = child; });
-      if (cap) {
-        const on = this.running && this.active.has(id);
-        const pulse = on ? 1 + Math.sin(now * .045) * .06 : 1;
-        cap.scale.set(pulse, 1, pulse);
+      if (!m) continue;
+
+      if (m.type === 'lamp' || m.type === 'led') {
+        let bulb: THREE.Mesh | undefined;
+        o.traverse(child => {
+          if (!bulb && child.userData.lampBulb && (child as THREE.Mesh).isMesh) bulb = child as THREE.Mesh;
+        });
+        if (bulb?.material instanceof THREE.MeshStandardMaterial) {
+          const on = this.running && this.active.has(id);
+          bulb.material.emissive.setHex(on ? (m.type === 'led' ? 0x35ff73 : 0xffc928) : 0x000000);
+          bulb.material.emissiveIntensity = on ? 2.8 : 0;
+        }
+      }
+
+      if (m.type === 'buzzer') {
+        let cap: THREE.Object3D | undefined;
+        o.traverse(child => { if (!cap && child.userData.buzzerCap) cap = child; });
+        if (cap) {
+          const on = this.running && this.active.has(id);
+          const pulse = on ? 1 + Math.sin(now * .045) * .06 : 1;
+          cap.scale.set(pulse, 1, pulse);
+        }
+      }
+
+      let waterFx: THREE.Object3D | undefined;
+      o.traverse(child => { if (!waterFx && child.userData.waterEffect) waterFx = child; });
+      if (waterFx) {
+        const flowing = this.running && this.fluid.has(id);
+        waterFx.visible = flowing;
+        if (flowing) {
+          waterFx.children.forEach((drop, index) => {
+            const cycle = ((now * .0012 + index / 12) % 1);
+            drop.position.z = .5 + cycle * 1.75;
+            drop.position.y = -.18 * cycle * cycle + ((index % 2) ? .04 : -.04);
+          });
+        }
+      }
+
+      if (m.type === 'pipe') {
+        o.traverse(child => {
+          if (!child.userData.fluidGlow || !(child as THREE.Mesh).isMesh) return;
+          const mat = (child as THREE.Mesh).material;
+          if (mat instanceof THREE.MeshBasicMaterial) mat.opacity = this.running && this.fluid.has(id) ? .72 : .2;
+        });
+      }
+
+      if (m.type === 'water-tank') {
+        o.traverse(child => {
+          if (!child.userData.waterSurface) return;
+          child.position.y = -.15 + Math.sin(now * .003) * .015;
+        });
       }
     }
-    this.controls.update(); this.renderer.render(this.scene, this.camera);
+
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
   }
 }
