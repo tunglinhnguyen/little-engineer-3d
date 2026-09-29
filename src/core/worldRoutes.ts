@@ -130,7 +130,7 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
   while (current && !used.has(current)) {
     ordered.push(current);
     used.add(current);
-    const options = structuralNeighbors(graph, current, allowed)
+    const options: { id: string; connection: Connection }[] = structuralNeighbors(graph, current, allowed)
       .filter(n => component.has(n.id) && n.id !== previous && !used.has(n.id));
     if (!options.length) break;
 
