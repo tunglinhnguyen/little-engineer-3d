@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { MODULES } from '../core/moduleRegistry';
 import type { ModuleInstance, ModuleType, PortDefinition } from '../core/types';
 
+const LABEL_TEXTURES = new Map<string, THREE.CanvasTexture>();
+
 const COLORS: Partial<Record<ModuleType, number>> = {
   battery: 0x49a6e9, solar: 0x2f6f9f, 'hand-crank': 0x9b6bd3,
   switch: 0xf4a340, sensor: 0x5cc88a,
@@ -71,21 +73,28 @@ function addWaterEffect(group: THREE.Group, length = 1.45) {
 }
 
 function labelSprite(text: string) {
-  const c = document.createElement('canvas');
-  c.width = 460;
-  c.height = 110;
-  const x = c.getContext('2d')!;
-  x.fillStyle = '#ffffffee';
-  x.roundRect(8, 8, 444, 94, 28);
-  x.fill();
-  x.fillStyle = '#173049';
-  x.font = '700 38px system-ui';
-  x.textAlign = 'center';
-  x.textBaseline = 'middle';
-  x.fillText(text, 230, 56);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+  let texture = LABEL_TEXTURES.get(text);
+  if (!texture) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 460;
+    canvas.height = 110;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#ffffffee';
+    ctx.roundRect(8, 8, 444, 94, 28);
+    ctx.fill();
+    ctx.fillStyle = '#173049';
+    ctx.font = '700 38px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 230, 56);
+    texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    LABEL_TEXTURES.set(text, texture);
+  }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
   s.scale.set(2, .48, 1);
   s.position.y = 1.18;
+  s.renderOrder = 8;
   return s;
 }
 
@@ -115,13 +124,16 @@ function addPortVisual(group: THREE.Group, p: PortDefinition) {
     const collar = mesh(new THREE.CylinderGeometry(.14, .14, .12, 18), material);
     collar.rotation.x = Math.PI / 2;
     collar.position.z = p.direction === 'out' ? .055 : -.055;
+    collar.castShadow = false; collar.receiveShadow = false;
     root.add(collar);
     const face = mesh(new THREE.TorusGeometry(.09, .025, 8, 18), material);
+    face.castShadow = false; face.receiveShadow = false;
     root.add(face);
   } else if (p.signal === 'rotation') {
     const shaft = mesh(new THREE.CylinderGeometry(.095, .095, .2, 12), material);
     shaft.rotation.x = Math.PI / 2;
     shaft.position.z = p.direction === 'out' ? .08 : -.08;
+    shaft.castShadow = false; shaft.receiveShadow = false;
     root.add(shaft);
     const collar = mesh(new THREE.CylinderGeometry(.15, .15, .07, 16), material);
     collar.rotation.x = Math.PI / 2;
@@ -129,14 +141,17 @@ function addPortVisual(group: THREE.Group, p: PortDefinition) {
   } else if (p.signal === 'fluid') {
     const flange = mesh(new THREE.CylinderGeometry(.16, .16, .08, 18), material);
     flange.rotation.x = Math.PI / 2;
+    flange.castShadow = false; flange.receiveShadow = false;
     root.add(flange);
     const tube = mesh(new THREE.CylinderGeometry(.095, .095, .22, 18), material);
     tube.rotation.x = Math.PI / 2;
     tube.position.z = p.direction === 'out' ? .08 : -.08;
+    tube.castShadow = false; tube.receiveShadow = false;
     root.add(tube);
   } else {
     const stud = mesh(new THREE.CylinderGeometry(.11, .11, .12, 12), material);
     stud.rotation.x = Math.PI / 2;
+    stud.castShadow = false; stud.receiveShadow = false;
     root.add(stud);
   }
 
