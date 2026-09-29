@@ -9,6 +9,7 @@ type Voice = {
 
 const SOUND_TYPES = new Set<ModuleType>([
   'motor', 'fan', 'propeller', 'drill', 'pump', 'conveyor', 'winch', 'mixer', 'buzzer', 'nozzle',
+  'car-base', 'motorcycle-base', 'train-engine',
 ]);
 
 export class SoundEngine {
@@ -120,6 +121,9 @@ export class SoundEngine {
       type === 'conveyor' ? 70 + rpm * .25 :
       type === 'winch' ? 80 + rpm * .2 :
       type === 'mixer' ? 95 + rpm * .35 :
+      type === 'car-base' ? 92 + rpm * .38 :
+      type === 'motorcycle-base' ? 118 + rpm * .58 :
+      type === 'train-engine' ? 72 + rpm * .26 :
       85 + rpm * .45;
     frequency = Math.min(1100, Math.max(45, frequency));
     voice.oscillator.frequency.setTargetAtTime(frequency, now, .04);
@@ -129,6 +133,7 @@ export class SoundEngine {
     if (type === 'buzzer') return .11;
     if (type === 'drill') return .06;
     if (type === 'pump' || type === 'nozzle') return .055;
+    if (type === 'car-base' || type === 'motorcycle-base' || type === 'train-engine') return .05;
     if (type === 'fan' || type === 'propeller') return .04;
     return .035;
   }
