@@ -266,6 +266,28 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     description: 'Nút giao hai tuyến ray.', science: 'Nút giao phải giữ khe dẫn hướng liên tục cho vành bánh tàu.',
     size: [2.3, .2, 2.3], ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.45, 0, p.position[2] * 1.45] })), behavior: { kind: 'structure' },
   },
+  'rail-switch': {
+    type: 'rail-switch', name: 'Ghi chuyển hướng', icon: '🔀', category: 'transport',
+    description: 'Bộ ghi cho phép đoàn tàu chọn tuyến thẳng hoặc tuyến rẽ.', science: 'Lưỡi ghi đổi vị trí để dẫn vành bánh tàu sang một trong hai nhánh ray.',
+    size: [3.1, .22, 3.4],
+    ports: [
+      { ...STRUCT_Z[0], position: [0, 0, -1.55], id: 'rail-back' },
+      { ...STRUCT_Z[1], position: [0, 0, 1.55], id: 'rail-straight' },
+      { ...STRUCT_X[1], position: [1.55, 0, .55], id: 'rail-branch' },
+    ],
+    behavior: { kind: 'structure' },
+  },
+  'train-station': {
+    type: 'train-station', name: 'Ga tàu', icon: '🚉', category: 'transport',
+    description: 'Sân ga có đường ray đi xuyên qua và mái chờ.', science: 'Ga là điểm đoàn tàu giảm tốc, dừng đón trả hành khách rồi tiếp tục hành trình.',
+    size: [3.2, 1.25, 3.5],
+    ports: [
+      { ...STRUCT_Z[0], position: [0, 0, -1.65], id: 'rail-in' },
+      { ...STRUCT_Z[1], position: [0, 0, 1.65], id: 'rail-out' },
+    ],
+    behavior: { kind: 'structure' },
+  },
+
   bridge: {
     type: 'bridge', name: 'Cầu', icon: '🌉', category: 'transport',
     description: 'Cầu cho đường hoặc ray vượt sông.', science: 'Dầm cầu truyền tải trọng xuống trụ và nền.',
@@ -559,7 +581,7 @@ export const PALETTE: ModuleType[] = [
   'wheel', 'fan', 'propeller', 'drill', 'piston', 'conveyor', 'winch', 'mixer', 'lamp', 'led', 'buzzer',
   'water-tank', 'pipe', 'valve', 'pump', 'nozzle',
   'car-base', 'motorcycle-base', 'train-engine', 'train-wagon', 'airplane', 'helicopter', 'boat', 'crane', 'excavator', 'bulldozer', 'firetruck',
-  'road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge', 'rail-bridge', 'runway', 'helipad', 'harbor', 'dock',
+  'road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'rail-straight', 'rail-curve', 'rail-crossing', 'rail-switch', 'train-station', 'bridge', 'rail-bridge', 'runway', 'helipad', 'harbor', 'dock',
   'foundation', 'floor-slab', 'wall', 'door-wall', 'window-wall', 'roof', 'stairs', 'balcony', 'door', 'column', 'fence', 'chassis',
   'chair', 'table', 'sofa', 'bed', 'kitchen', 'bookshelf', 'streetlight', 'traffic-light', 'hydrant',
   'grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'sea-tile', 'island', 'waterfall', 'cave', 'hill', 'mountain', 'tree', 'bush', 'flower', 'cloud', 'rock',
