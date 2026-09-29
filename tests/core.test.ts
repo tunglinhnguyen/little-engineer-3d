@@ -205,6 +205,41 @@ describe('workbench pointer regressions', () => {
   });
 });
 
+
+describe('saved project migration', () => {
+  it('repairs a v1 assembly that visually touches but lost one switch connection', () => {
+    const battery = module('battery', 'battery'), sw = module('switch', 'switch'), lamp = module('lamp', 'lamp');
+    battery.position = [0, .65, 0]; sw.position = [1.44, .65, 0]; lamp.position = [2.88, .65, 0];
+    const partial = normalizeConnection(battery, port('battery','power-out'), sw, port('switch','power-in'))!;
+    const graph = new ConnectionGraph();
+    graph.restore({
+      version: 1,
+      modules: [battery, sw, lamp],
+      connections: [{ id: 'old-one-sided', ...partial } as Connection],
+    });
+    expect(graph.connections.size).toBe(2);
+    expect(new SimulationEngine(graph).evaluate().active.has(lamp.id)).toBe(true);
+    expect(graph.serialize().version).toBe(2);
+  });
+
+  it('ignores malformed v2 connections instead of showing a false connected state', () => {
+    const battery = module('battery', 'battery'), fan = module('fan', 'fan');
+    const graph = new ConnectionGraph();
+    graph.restore({
+      version: 2,
+      modules: [battery, fan],
+      connections: [{
+        id: 'bad',
+        fromModuleId: battery.id, fromPortId: 'power-out',
+        toModuleId: fan.id, toPortId: 'rotation-in',
+        signal: 'power',
+      }],
+    });
+    expect(graph.connections.size).toBe(0);
+    expect(new SimulationEngine(graph).evaluate().active.has(fan.id)).toBe(false);
+  });
+});
+
 describe('simulation graph', () => {
   function setupFan(switchOn = true) {
     const g = new ConnectionGraph(); const b = module('b','battery'), s = module('s','switch',switchOn), m = module('m','motor'), sh = module('sh','shaft'), f = module('f','fan');
