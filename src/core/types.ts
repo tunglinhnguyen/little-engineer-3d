@@ -172,6 +172,40 @@ export interface SimulationState {
   rpm: Map<string, number>;
   active: Set<string>;
   fluid: Set<string>;
+  voltage: Map<string, number>;
+  current: Map<string, number>;
+  torque: Map<string, number>;
+  flow: Map<string, number>;
+  pressure: Map<string, number>;
+  faults: Map<string, string[]>;
+}
+
+export interface ProjectSnapshot {
+  id: string;
+  name: string;
+  updatedAt: number;
+  playerName: string;
+  graph: {
+    modules: ModuleInstance[];
+    connections: Connection[];
+  };
+  thumbnail?: string;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt?: number;
+}
+
+export interface LearningProfile {
+  missionsCompleted: string[];
+  concepts: Record<string, number>;
+  achievements: Record<string, number>;
+  buildsSaved: number;
+  playSessions: number;
 }
 
 export interface Mission {
