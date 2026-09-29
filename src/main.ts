@@ -7,7 +7,7 @@ import type { ModuleCategory, ModuleInstance, ModuleType } from './core/types';
 import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
 import { SoundEngine } from './ui/sound';
-import { buildVehicleRoute, routeKindForVehicle } from './core/worldRoutes';
+import { vehicleCanTravel } from './core/vehicleRules';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
@@ -23,7 +23,7 @@ app.innerHTML = `
     </div>
   </section>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.6.1</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.7.0</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
@@ -293,20 +293,11 @@ function renderInspector(id: string | null) {
   const state = simulator.evaluate();
   let runtimeStatus = '';
   if (d.behavior.kind === 'vehicle') {
+    const travel = vehicleCanTravel(graph, id, state.rpm);
     const rpm = state.rpm.get(id);
-    const routeKind = routeKindForVehicle(m.type);
-    const route = routeKind ? buildVehicleRoute(graph, id) : [];
-    const infrastructure =
-      routeKind === 'road' ? 'đường' :
-      routeKind === 'rail' ? 'đường ray' :
-      routeKind === 'runway' ? 'đường băng' :
-      m.type === 'boat' ? 'mặt nước' :
-      m.type === 'helicopter' ? 'bãi đáp' : 'khu vực phù hợp';
-    runtimeStatus = rpm
-      ? (routeKind && route.length < 2
-          ? '⚠️ Có truyền động nhưng chưa ở gần ' + infrastructure + '.'
-          : '✅ Đã nhận truyền động ' + Math.round(Math.abs(rpm)) + ' rpm.')
-      : '○ Chưa nhận mô-men từ mô tơ/hộp số.';
+    runtimeStatus = travel.ready
+      ? '✅ Sẵn sàng chạy · ' + Math.round(Math.abs(rpm ?? 0)) + ' rpm · ' + travel.infrastructure.message
+      : '⚠️ ' + travel.message;
   } else if (d.behavior.kind === 'motor') {
     runtimeStatus = state.powered.has(id) ? '✅ Mô tơ đang được cấp điện.' : '○ Mô tơ chưa có điện.';
   } else if (d.behavior.kind === 'pump') {
@@ -574,7 +565,7 @@ document.body.appendChild(audioToggle);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-7', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-8', {
         scope: './',
         updateViaCache: 'none',
       });
