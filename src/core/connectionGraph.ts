@@ -112,7 +112,7 @@ export class ConnectionGraph {
         ...m,
         position: [Number(m.position[0]) || 0, Number(m.position[1]) || .65, Number(m.position[2]) || 0],
         rotationY: Number.isFinite(m.rotationY) ? m.rotationY : 0,
-        switchOn: m.type === 'switch' ? m.switchOn !== false : m.switchOn,
+        switchOn: (m.type === 'switch' || m.type === 'valve') ? m.switchOn !== false : m.switchOn,
       });
     }
 
