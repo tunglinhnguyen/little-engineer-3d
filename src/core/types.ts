@@ -2,27 +2,38 @@ import type { Vector3Tuple } from 'three';
 
 export type ModuleType =
   | 'battery'
-  | 'switch'
-  | 'motor'
-  | 'shaft'
-  | 'gear-small'
-  | 'gear-large'
-  | 'wheel'
-  | 'fan'
-  | 'drill'
-  | 'lamp'
-  | 'sensor'
-  | 'chassis'
   | 'solar'
   | 'hand-crank'
+  | 'switch'
+  | 'sensor'
+  | 'motor'
+  | 'shaft'
   | 'bearing'
+  | 'gear-small'
+  | 'gear-large'
+  | 'belt-drive'
+  | 'cam'
+  | 'wheel'
+  | 'fan'
   | 'propeller'
+  | 'drill'
   | 'pump'
+  | 'piston'
+  | 'conveyor'
+  | 'winch'
+  | 'mixer'
+  | 'lamp'
+  | 'led'
   | 'buzzer'
-  | 'led';
+  | 'water-tank'
+  | 'pipe'
+  | 'valve'
+  | 'nozzle'
+  | 'chassis';
 
-export type SignalType = 'power' | 'rotation' | 'structural';
+export type SignalType = 'power' | 'rotation' | 'fluid' | 'structural';
 export type PortDirection = 'in' | 'out' | 'bi';
+export type ModuleCategory = 'energy' | 'control' | 'motion' | 'output' | 'fluid' | 'structure';
 
 export interface PortDefinition {
   id: string;
@@ -36,13 +47,29 @@ export interface ModuleDefinition {
   type: ModuleType;
   name: string;
   icon: string;
-  category: 'energy' | 'control' | 'motion' | 'output' | 'structure';
+  category: ModuleCategory;
   description: string;
   science: string;
   size: Vector3Tuple;
   ports: PortDefinition[];
   behavior: {
-    kind: 'source' | 'rotation-source' | 'switch' | 'motor' | 'pass-rotation' | 'gear' | 'rotation-output' | 'power-output' | 'sensor' | 'structure';
+    kind:
+      | 'source'
+      | 'rotation-source'
+      | 'switch'
+      | 'motor'
+      | 'pass-rotation'
+      | 'gear'
+      | 'transmission'
+      | 'rotation-output'
+      | 'power-output'
+      | 'sensor'
+      | 'fluid-source'
+      | 'fluid-pass'
+      | 'fluid-valve'
+      | 'pump'
+      | 'fluid-output'
+      | 'structure';
     rpm?: number;
     ratio?: number;
     teeth?: number;
@@ -70,6 +97,7 @@ export interface SimulationState {
   powered: Set<string>;
   rpm: Map<string, number>;
   active: Set<string>;
+  fluid: Set<string>;
 }
 
 export interface Mission {
@@ -79,5 +107,6 @@ export interface Mission {
   description: string;
   lesson: string;
   requiredPath: ModuleType[];
+  requiredPaths?: ModuleType[][];
   success: string;
 }
