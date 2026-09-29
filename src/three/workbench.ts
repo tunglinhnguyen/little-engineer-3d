@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MODULES } from '../core/moduleRegistry';
 import { ConnectionGraph, modulePortsCompatible } from '../core/connectionGraph';
 import { buildVehicleRoute, routeKindForVehicle } from '../core/worldRoutes';
+import { vehicleInfrastructureStatus } from '../core/vehicleRules';
 import type { Connection, ModuleInstance } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
 
@@ -695,8 +696,6 @@ export class Workbench {
 
     if (this.running) {
       const modules = [...this.graph.modules.values()];
-      const waterSurfaces = modules.filter(m => m.type === 'water-tile' || m.type === 'river-tile' || m.type === 'sea-tile');
-      const helipads = modules.filter(m => m.type === 'helipad');
       const moved = new Set<string>();
 
       const placeAssembly = (
@@ -730,8 +729,9 @@ export class Workbench {
         if (!vehicle || MODULES[vehicle.type].behavior.kind !== 'vehicle') continue;
 
         const travelSpeed = MODULES[vehicle.type].behavior.vehicleSpeed ?? 1;
+        const infrastructure = vehicleInfrastructureStatus(this.graph, vehicleId);
         const routeKind = routeKindForVehicle(vehicle.type);
-        const route = routeKind ? buildVehicleRoute(this.graph, vehicleId) : [];
+        const route = infrastructure.route;
 
         if (route.length >= 2) {
           const curve = new THREE.CatmullRomCurve3(
@@ -830,38 +830,34 @@ export class Workbench {
         const base = new THREE.Vector3(...vehicle.position);
         const phase = now * .00075 * travelSpeed * Math.max(.55, Math.abs(speed) / 90);
 
-        if (vehicle.type === 'helicopter' && helipads.length) {
-          const pad = helipads.reduce((best, candidate) => {
-            const bd = Math.hypot(best.position[0] - vehicle.position[0], best.position[2] - vehicle.position[2]);
-            const cd = Math.hypot(candidate.position[0] - vehicle.position[0], candidate.position[2] - vehicle.position[2]);
-            return cd < bd ? candidate : best;
-          });
-          const target = new THREE.Vector3(
-            pad.position[0] + Math.cos(phase * .65) * .45,
-            pad.position[1],
-            pad.position[2] + Math.sin(phase * .65) * .45,
-          );
-          placeAssembly(vehicleId, target, vehicle.rotationY + Math.sin(phase * .35) * .2, 1.0 + Math.sin(phase * 1.8) * .1);
-          continue;
+        if (vehicle.type === 'helicopter' && infrastructure.ready && infrastructure.anchorId) {
+          const pad = this.graph.modules.get(infrastructure.anchorId);
+          if (pad) {
+            const target = new THREE.Vector3(
+              pad.position[0] + Math.cos(phase * .65) * .45,
+              pad.position[1],
+              pad.position[2] + Math.sin(phase * .65) * .45,
+            );
+            placeAssembly(vehicleId, target, vehicle.rotationY + Math.sin(phase * .35) * .2, 1.0 + Math.sin(phase * 1.8) * .1);
+            continue;
+          }
         }
 
-        if (vehicle.type === 'boat' && waterSurfaces.length) {
-          const water = waterSurfaces.reduce((best, candidate) => {
-            const bd = Math.hypot(best.position[0] - vehicle.position[0], best.position[2] - vehicle.position[2]);
-            const cd = Math.hypot(candidate.position[0] - vehicle.position[0], candidate.position[2] - vehicle.position[2]);
-            return cd < bd ? candidate : best;
-          });
-          const rx = Math.max(.7, MODULES[water.type].size[0] * .36);
-          const rz = Math.max(.7, MODULES[water.type].size[2] * .36);
-          const target = new THREE.Vector3(
-            water.position[0] + Math.cos(phase) * rx,
-            vehicle.position[1],
-            water.position[2] + Math.sin(phase) * rz,
-          );
-          const tangent = new THREE.Vector3(-Math.sin(phase) * rx, 0, Math.cos(phase) * rz).normalize();
-          const yaw = Math.atan2(-tangent.z, tangent.x);
-          placeAssembly(vehicleId, target, yaw, Math.sin(phase * 3) * .04);
-          continue;
+        if (vehicle.type === 'boat' && infrastructure.ready && infrastructure.anchorId) {
+          const water = this.graph.modules.get(infrastructure.anchorId);
+          if (water) {
+            const rx = Math.max(.7, MODULES[water.type].size[0] * .36);
+            const rz = Math.max(.7, MODULES[water.type].size[2] * .36);
+            const target = new THREE.Vector3(
+              water.position[0] + Math.cos(phase) * rx,
+              vehicle.position[1],
+              water.position[2] + Math.sin(phase) * rz,
+            );
+            const tangent = new THREE.Vector3(-Math.sin(phase) * rx, 0, Math.cos(phase) * rz).normalize();
+            const yaw = Math.atan2(-tangent.z, tangent.x);
+            placeAssembly(vehicleId, target, yaw, Math.sin(phase * 3) * .04);
+            continue;
+          }
         }
 
         // Construction vehicles can still demonstrate drive and working
