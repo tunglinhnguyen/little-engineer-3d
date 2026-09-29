@@ -345,6 +345,18 @@ function renderInspector(id: string | null) {
   };
 }
 
+function renderMission(announce = true) {
+  const mission = MISSIONS[missionIndex];
+  document.querySelector<HTMLElement>('#missionEmoji')!.textContent = mission.emoji;
+  document.querySelector<HTMLElement>('#missionTitle')!.textContent = mission.title;
+  document.querySelector<HTMLElement>('#missionDescription')!.textContent = mission.description;
+  document.querySelector<HTMLElement>('#missionLesson')!.textContent = mission.lesson;
+  document.querySelector<HTMLElement>('#missionCount')!.textContent = (missionIndex + 1) + ' / ' + MISSIONS.length;
+  localStorage.setItem('le3d-mission', String(missionIndex));
+  updateMissionHint();
+  if (announce) speak(mission.title + '. ' + mission.description + ' ' + mission.lesson);
+}
+
 function updateMissionHint(state = simulator.evaluate()) {
   const feedback = getMissionFeedback(graph, MISSIONS[missionIndex], state, mode === 'run');
   coach.textContent = feedback.message;
