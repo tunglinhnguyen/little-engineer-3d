@@ -45,3 +45,7 @@
 .mission.sandbox-hidden{display:none}.palette-empty{grid-column:1/-1;text-align:center;padding:14px;font-size:9px;color:#657b86}
 @media(max-width:760px){.tool-drawer{top:66px;right:6px;width:min(340px,calc(100vw - 12px));max-height:calc(100vh - var(--palette-clearance,145px) - 78px);padding:8px}.tool-tabs button{font-size:8px}.tool-grid button{font-size:8px;min-height:32px}.blueprint-card small,.tutorial-card small{font-size:7px}}
 @media(max-width:520px){.tool-drawer{width:min(306px,calc(100vw - 10px));right:5px;top:62px}.tool-tabs{grid-template-columns:repeat(2,1fr)}.maker-grid{grid-template-columns:1fr}.maker-grid #createMakerBtn{grid-column:auto}.project-create{grid-template-columns:1fr}}
+
+.tool-drawer.hidden-by-user{display:none!important}
+.camera-bar{width:max-content;max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.camera-bar::-webkit-scrollbar{display:none}
