@@ -19,7 +19,7 @@ export interface Collision {
 }
 
 function halfExtents(module: ModuleInstance) {
-  const [x,y,z] = MODULES[module.type].size;
+  const [x,y,z] = module.custom?.size ?? MODULES[module.type].size;
   const quarterTurn = Math.round(module.rotationY / (Math.PI / 2)) % 2 !== 0;
   return {
     x: (quarterTurn ? z : x) * .46,
