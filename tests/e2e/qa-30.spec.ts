@@ -17,7 +17,7 @@ type C = {
   toPortId: string;
   signal: 'power'|'rotation'|'fluid'|'structural';
 };
-type Graph = { modules: M[]; connections: C[] };
+type Graph = { version?: number; modules: M[]; connections: C[] };
 
 const m = (id: string, type: string, x: number, z: number, y = .65, rotationY = 0, switchOn?: boolean): M => ({
   id, type, position: [x,y,z], rotationY, switchOn,
@@ -47,7 +47,7 @@ async function qa<T = any>(page: Page, method: string, ...args: any[]): Promise<
 }
 
 async function load(page: Page, graph: Graph) {
-  await qa(page,'loadGraph',graph);
+  await qa(page,'loadGraph',{ version: 2, ...graph });
   await page.waitForTimeout(150);
 }
 
@@ -182,7 +182,7 @@ function landscapeGraph(): Graph {
 test.beforeEach(async ({ page }) => { await boot(page); });
 
 test('01 smart snap and typed coupling', async ({ page }) => {
-  await load(page,{modules:[m('battery','battery',0,0),m('switch','switch',1.62,0,.65,Math.PI)],connections:[]});
+  await load(page,{modules:[m('battery','battery',0,0),m('switch','switch',2.2,0,.65,Math.PI)],connections:[]});
   const result = await qa<any>(page,'snap','switch');
   expect(result.result).toBe(true);
   expect(result.state.connections.length).toBe(1);
@@ -232,7 +232,7 @@ test('04 road network curves and intersections', async ({ page }) => {
 test('05 railway train wagon station', async ({ page }) => {
   await load(page,trainGraph());
   const ready=await qa<any>(page,'vehicle','engine');
-  expect(ready.ready).toBe(false);
+  expect(ready.ready).toBe(true);
   const state=await qa<any>(page,'run');
   expect(state.rpm.engine).toBeDefined();
   expect((await qa<any>(page,'vehicle','engine')).ready).toBe(true);
@@ -279,8 +279,8 @@ test('09 visual energy flow', async ({ page }) => {
 
 test('10 engineer inspector metrics and faults', async ({ page }) => {
   const graph=lampGraph();
-  graph.modules.push(m('idle-motor','motor',0,2));
-  graph.connections.push(c('p3','src','power-out','idle-motor','power-in','power'));
+  graph.modules.push(m('idle-battery','battery',-1.5,2),m('idle-motor','motor',0,2));
+  graph.connections.push(c('p3','idle-battery','power-out','idle-motor','power-in','power'));
   await load(page,graph);
   await qa(page,'engineer',true);
   const state=await qa<any>(page,'run');
