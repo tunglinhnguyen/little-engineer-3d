@@ -22,7 +22,7 @@ app.innerHTML = `
     </div>
   </section>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.4.0</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.5.0</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
@@ -81,6 +81,7 @@ function applyPlayerName(raw: string, announce = true) {
   localStorage.setItem('le3d-player-name', clean);
   playerNameInput.value = clean;
   worldTitle.textContent = 'Thế giới của ' + clean;
+  document.title = 'Thế giới của ' + clean;
   workbench.setPlayerName(clean);
   welcomeScreen.classList.add('hidden');
   if (announce) speak('Chào ' + clean + '. Chào mừng con đến thế giới kỹ sư của mình. Hãy chọn mô đun để bắt đầu xây dựng.');
@@ -328,7 +329,7 @@ document.body.appendChild(audioToggle);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-4', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-5', {
         scope: './',
         updateViaCache: 'none',
       });
