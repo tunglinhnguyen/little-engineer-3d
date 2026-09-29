@@ -224,6 +224,24 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     ],
     behavior: { kind: 'structure' },
   },
+  'road-crossing': {
+    type: 'road-crossing', name: 'Ngã tư đường', icon: '✚', category: 'transport',
+    description: 'Nút giao bốn hướng cho ô tô và xe máy.', science: 'Ngã tư cần tổ chức quyền đi để tránh xung đột; đèn tín hiệu giúp phân luồng theo thời gian.',
+    size: [2.7, .12, 2.7],
+    ports: STRUCT_4.map(p => ({ ...p, position: [p.position[0] * 1.72, 0, p.position[2] * 1.72] })),
+    behavior: { kind: 'structure' },
+  },
+  'road-t-junction': {
+    type: 'road-t-junction', name: 'Ngã ba chữ T', icon: '⊥', category: 'transport',
+    description: 'Nút giao ba hướng để mở nhánh đường.', science: 'Nút giao chữ T cho phép một tuyến phụ nhập vào tuyến chính; xe cần giảm tốc khi đổi hướng.',
+    size: [2.7, .12, 2.7],
+    ports: [
+      { ...STRUCT_Z[0], position: [0, 0, -1.34], id: 'road-back' },
+      { ...STRUCT_X[0], position: [-1.34, 0, 0], id: 'road-left' },
+      { ...STRUCT_X[1], position: [1.34, 0, 0], id: 'road-right' },
+    ],
+    behavior: { kind: 'structure' },
+  },
   'rail-straight': {
     type: 'rail-straight', name: 'Ray thẳng', icon: '🛤️', category: 'transport',
     description: 'Đoạn đường sắt thẳng.', science: 'Hai thanh ray song song dẫn hướng và chịu tải bánh tàu.',
@@ -248,6 +266,14 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     type: 'bridge', name: 'Cầu', icon: '🌉', category: 'transport',
     description: 'Cầu cho đường hoặc ray vượt sông.', science: 'Dầm cầu truyền tải trọng xuống trụ và nền.',
     size: [2.0, .65, 3.0], ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.9] })), behavior: { kind: 'structure' },
+  },
+
+  'rail-bridge': {
+    type: 'rail-bridge', name: 'Cầu đường sắt', icon: '🌉', category: 'transport',
+    description: 'Cầu chuyên dụng có hai ray chạy qua.', science: 'Cầu đường sắt phải giữ đúng khổ ray và truyền tải trọng đoàn tàu xuống trụ cầu.',
+    size: [1.75, .72, 3.0],
+    ports: STRUCT_Z.map(p => ({ ...p, position: [0, 0, p.position[2] * 1.92] })),
+    behavior: { kind: 'structure' },
   },
 
   foundation: {
@@ -506,7 +532,7 @@ export const PALETTE: ModuleType[] = [
   'wheel', 'fan', 'propeller', 'drill', 'piston', 'conveyor', 'winch', 'mixer', 'lamp', 'led', 'buzzer',
   'water-tank', 'pipe', 'valve', 'pump', 'nozzle',
   'car-base', 'motorcycle-base', 'train-engine', 'train-wagon', 'airplane', 'helicopter', 'boat', 'crane', 'excavator', 'bulldozer', 'firetruck',
-  'road-straight', 'road-curve', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge', 'runway', 'helipad', 'harbor', 'dock',
+  'road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'rail-straight', 'rail-curve', 'rail-crossing', 'bridge', 'rail-bridge', 'runway', 'helipad', 'harbor', 'dock',
   'foundation', 'floor-slab', 'wall', 'door-wall', 'window-wall', 'roof', 'stairs', 'balcony', 'door', 'column', 'fence', 'chassis',
   'chair', 'table', 'sofa', 'bed', 'kitchen', 'bookshelf', 'streetlight', 'traffic-light', 'hydrant',
   'grass-tile', 'soil-tile', 'water-tile', 'river-tile', 'sea-tile', 'island', 'waterfall', 'cave', 'hill', 'mountain', 'tree', 'bush', 'flower', 'cloud', 'rock',
