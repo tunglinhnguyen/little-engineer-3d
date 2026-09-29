@@ -296,7 +296,7 @@ test('11 iPad camera presets lock and focus', async ({ page }) => {
   await qa(page,'camera','top');
   await expect(page.locator('.camera-bar')).toBeVisible();
   await page.locator('#cameraLockBtn').click();
-  await expect(page.locator('#cameraLockBtn')).toContainText('Khóa');
+  await expect(page.locator('#cameraLockBtn')).toHaveText('🔒 Góc nhìn');
   await shot(page,11,'camera','Camera có 6 góc, toàn cảnh, vật chọn, khóa và theo vật');
 });
 
