@@ -44,6 +44,7 @@ export class Workbench {
   private fluid = new Set<string>();
   private labSign: THREE.Sprite | null = null;
   private vehicleTravel = new Map<string, number>();
+  private vehicleYaw = new Map<string, number>();
   private cameraLocked = false;
   private cameraFollowSelected = false;
   private routeGuide = new THREE.Group();
@@ -442,7 +443,7 @@ export class Workbench {
     this.active = active;
     this.fluid = fluid;
     if (this.connectionLayer) this.connectionLayer.visible = !running;
-    if (!running) this.vehicleTravel.clear();
+    if (!running) { this.vehicleTravel.clear(); this.vehicleYaw.clear(); }
   }
 
   cancelInteraction() { this.finishDrag(true); }
@@ -1067,11 +1068,51 @@ export class Workbench {
             }
           }
 
-          this.vehicleTravel.set(vehicleId, progress);
           const baseYaw = Math.atan2(-frame.tangent.z, frame.tangent.x);
           const yaw = vehicle.type === 'train-engine' ? baseYaw + Math.PI : baseYaw;
+
+          let target = frame.target.clone();
+          if (
+            routeKind === 'road' &&
+            (vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base' || vehicle.type === 'firetruck')
+          ) {
+            const right = new THREE.Vector3(frame.tangent.z, 0, -frame.tangent.x).normalize();
+            target.addScaledVector(right, .28);
+          }
+
+          const componentIds = this.connectedComponent(vehicleId);
+          const previewVehicle: ModuleInstance = { ...vehicle, position: target.toArray() as [number,number,number] };
+          const obstacles = modules.filter(module => !componentIds.has(module.id));
+          const blocked = collisionsFor(previewVehicle, obstacles).some(hit => hit.penetration > .08);
+          if (blocked) {
+            progress = previousProgress;
+            frame = sample(progress);
+            target = frame.target.clone();
+            if (
+              routeKind === 'road' &&
+              (vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base' || vehicle.type === 'firetruck')
+            ) {
+              const right = new THREE.Vector3(frame.tangent.z, 0, -frame.tangent.x).normalize();
+              target.addScaledVector(right, .28);
+            }
+          }
+
+          this.vehicleTravel.set(vehicleId, progress);
           const lift = vehicle.type === 'airplane' ? Math.sin(Math.PI * frame.t) ** 2 * 1.7 : 0;
-          placeAssembly(vehicleId, frame.target, yaw, lift);
+          placeAssembly(vehicleId, target, yaw, lift);
+
+          if (vehicle.type === 'car-base' || vehicle.type === 'firetruck') {
+            const previousYaw = this.vehicleYaw.get(vehicleId) ?? yaw;
+            let delta = yaw - previousYaw;
+            while (delta > Math.PI) delta -= Math.PI * 2;
+            while (delta < -Math.PI) delta += Math.PI * 2;
+            const steer = THREE.MathUtils.clamp(delta / Math.max(dt, .008) * .06, -.42, .42);
+            const vehicleObject = this.objects.get(vehicleId);
+            vehicleObject?.traverse(child => {
+              if (child.userData.steerGroup) child.rotation.y = steer;
+            });
+            this.vehicleYaw.set(vehicleId, yaw);
+          }
 
           // Wagons follow the rail path independently instead of staying rigid
           // beside the locomotive on curves.
