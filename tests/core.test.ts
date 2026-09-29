@@ -253,9 +253,25 @@ describe('world route planner', () => {
     const route = buildVehicleRoute(g,car.id);
     expect(route.length).toBeGreaterThan(6);
     expect(route[0][0]).toBeCloseTo(0,1);
-    expect(route[0][2]).toBeCloseTo(-1.28,1);
-    expect(route[route.length - 1][0]).toBeCloseTo(1.28,1);
+    expect(route[0][2]).toBeCloseTo(-.925,2);
+    expect(route[route.length - 1][0]).toBeCloseTo(.925,2);
     expect(route[route.length - 1][2]).toBeCloseTo(0,1);
+  });
+
+  it('preserves curve samples inside a connected road network', () => {
+    const g = new ConnectionGraph();
+    const car = module('network-car','car-base');
+    const straight = module('network-straight','road-straight');
+    const curve = module('network-curve','road-curve');
+    car.position = [0,.65,-1.5];
+    straight.position = [0,.65,0];
+    curve.position = [0,.65,2.35];
+    [car,straight,curve].forEach(m=>g.addModule(m));
+    expect(g.snapModule(curve.id)).toBe(true);
+    const route = buildVehicleRoute(g,car.id);
+    expect(route.length).toBeGreaterThan(8);
+    const curvedSamples = route.filter(p => Math.abs(p[0] - route[0][0]) > .08);
+    expect(curvedSamples.length).toBeGreaterThan(3);
   });
 
   it('uses a nearby runway as a usable airplane route', () => {
