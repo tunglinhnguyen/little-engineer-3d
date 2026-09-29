@@ -223,6 +223,22 @@ export class Workbench {
     if (changed && m) this.hooks.onGraphChanged();
   }
 
+  private connectedComponent(startId: string) {
+    const seen = new Set<string>([startId]);
+    const queue = [startId];
+    while (queue.length) {
+      const id = queue.shift()!;
+      const edges = [...this.graph.incoming(id), ...this.graph.outgoing(id)];
+      for (const edge of edges) {
+        const other = edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId;
+        if (seen.has(other)) continue;
+        seen.add(other);
+        queue.push(other);
+      }
+    }
+    return seen;
+  }
+
   private cast(e: PointerEvent, objects: THREE.Object3D[]) { this.updatePointer(e); return this.ray.intersectObjects(objects, true); }
   private updatePointer(e: PointerEvent) { const r = this.canvas.getBoundingClientRect(); this.pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.pointer, this.camera); }
 
@@ -336,6 +352,40 @@ export class Workbench {
           if (!child.userData.waterSurface) return;
           child.position.y = -.15 + Math.sin(now * .003) * .015;
         });
+      }
+    }
+
+    // Vehicle travel preview: move the whole connected machine together so
+    // batteries/motors/gearboxes do not visually detach from the vehicle.
+    for (const [id, object] of this.objects) {
+      const model = this.graph.modules.get(id);
+      if (model) object.position.set(...model.position);
+    }
+    if (this.running) {
+      const hasRoad = [...this.graph.modules.values()].some(m => m.type === 'road-straight' || m.type === 'road-curve' || m.type === 'bridge');
+      const hasRail = [...this.graph.modules.values()].some(m => m.type === 'rail-straight' || m.type === 'rail-curve' || m.type === 'rail-crossing');
+      const moved = new Set<string>();
+
+      for (const [vehicleId, speed] of this.rpm) {
+        const vehicle = this.graph.modules.get(vehicleId);
+        if (!vehicle || MODULES[vehicle.type].behavior.kind !== 'vehicle') continue;
+        if ((vehicle.type === 'train-engine' && !hasRail) ||
+            ((vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base') && !hasRoad)) continue;
+
+        const component = this.connectedComponent(vehicleId);
+        const travelSpeed = MODULES[vehicle.type].behavior.vehicleSpeed ?? 1;
+        const distance = Math.sin(now * .00075 * travelSpeed * Math.max(.55, Math.abs(speed) / 90)) * 1.35;
+        const dx = Math.cos(vehicle.rotationY) * distance;
+        const dz = -Math.sin(vehicle.rotationY) * distance;
+
+        for (const partId of component) {
+          if (moved.has(partId)) continue;
+          const model = this.graph.modules.get(partId);
+          const part = this.objects.get(partId);
+          if (!model || !part) continue;
+          part.position.set(model.position[0] + dx, model.position[1], model.position[2] + dz);
+          moved.add(partId);
+        }
       }
     }
 
