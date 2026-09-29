@@ -44,6 +44,8 @@ export type ModuleType =
   | 'rail-straight'
   | 'rail-curve'
   | 'rail-crossing'
+  | 'rail-switch'
+  | 'train-station'
   | 'bridge'
   | 'rail-bridge'
   | 'foundation'
