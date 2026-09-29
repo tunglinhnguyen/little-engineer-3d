@@ -7,7 +7,7 @@ export type RouteKind = 'road' | 'rail' | 'runway';
 
 const ROUTE_TYPES: Record<RouteKind, Set<ModuleType>> = {
   road: new Set<ModuleType>(['road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'bridge']),
-  rail: new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'rail-bridge']),
+  rail: new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'rail-switch', 'train-station', 'rail-bridge']),
   runway: new Set<ModuleType>(['runway']),
 };
 
@@ -252,8 +252,13 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
       });
     }
 
+    const currentModule = graph.modules.get(current)!;
+    const chosen =
+      currentModule.type === 'rail-switch' && currentModule.switchOn === true && options.length > 1
+        ? options[options.length - 1]
+        : options[0];
     previous = current;
-    current = options[0].id;
+    current = chosen.id;
   }
 
   const points: Vector3[] = [];
