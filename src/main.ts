@@ -22,7 +22,7 @@ app.innerHTML = `
     </div>
   </section>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.6.0</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b id="worldTitle">Thế giới Kỹ sư 3D</b><small>Build · Invent · Explore · v0.6.1</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="nameBtn" class="icon-btn" title="Đổi tên">👤</button>
@@ -39,7 +39,17 @@ app.innerHTML = `
   <aside class="inspector panel" id="inspector">
     <div class="empty">Chạm một mô-đun để xem thông tin.</div>
   </aside>
-  <nav class="camera-bar panel"><button data-camera="iso" class="active">◩ Chéo</button><button data-camera="top">▦ Trên</button><button data-camera="front">▤ Trước</button></nav>
+  <nav class="camera-bar panel">
+    <button data-camera="iso" class="active">◩ Chéo</button>
+    <button data-camera="top">▦ Trên</button>
+    <button data-camera="front">▤ Trước</button>
+    <button data-camera="rear">▥ Sau</button>
+    <button data-camera="left">◧ Trái</button>
+    <button data-camera="right">◨ Phải</button>
+    <button id="focusAllBtn" title="Nhìn toàn bộ thế giới">⌗ Toàn cảnh</button>
+    <button id="focusSelectedBtn" title="Nhìn gần mô-đun đang chọn">◎ Vật chọn</button>
+    <button id="cameraLockBtn" title="Khóa/mở xoay góc nhìn">🔓 Góc nhìn</button>
+  </nav>
   <section class="palette panel">
     <div class="palette-title"><b>Kho mô-đun</b><span>${PALETTE.length} mô-đun · chọn theo nhóm</span></div>
     <div class="palette-tools"><input id="moduleSearch" type="search" inputmode="search" autocomplete="off" placeholder="🔎 Tìm xe, nhà, mô tơ, cây..." aria-label="Tìm mô-đun" /></div>
@@ -160,8 +170,12 @@ function addModule(type: ModuleType) {
     rotationY: 0,
     switchOn: (type === 'switch' || type === 'valve') ? true : type === 'door' ? false : undefined,
   };
-  workbench.addInstance(instance);
-  showToast(`➕ Đã đặt ${MODULES[type].name} vào chỗ trống`);
+  const attachTo = workbench.selectedId;
+  workbench.addInstance(instance, attachTo);
+  const joined = graph.incoming(id).length + graph.outgoing(id).length > 0;
+  showToast(joined
+    ? `🧲 ${MODULES[type].name} đã tự căn và ghép đúng khớp`
+    : `➕ Đã đặt ${MODULES[type].name} vào chỗ trống`);
   speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description} ${MODULES[type].science}`);
 }
 
@@ -234,55 +248,103 @@ addEventListener('resize', positionCoach);
 positionCoach();
 
 function renderInspector(id: string | null) {
-  const el = document.querySelector<HTMLDivElement>('#inspector')!; if (!id) { el.innerHTML = `<div class="empty">Chạm một mô-đun để xem thông tin.</div>`; return; }
-  const m = graph.modules.get(id); if (!m) return; const d = MODULES[m.type];
-  const ports = d.ports.map(p => {
-    const edge = [...graph.connections.values()].find(c => (c.fromModuleId === id && c.fromPortId === p.id) || (c.toModuleId === id && c.toPortId === p.id));
-    const other = edge ? graph.modules.get(edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId) : undefined;
-    const signalName = p.signal === 'power' ? 'Điện' : p.signal === 'rotation' ? 'Truyền động' : p.signal === 'fluid' ? 'Nước' : 'Kết cấu';
-    const name = signalName + ' ' + (p.direction === 'out' ? 'ra' : p.direction === 'in' ? 'vào' : 'hai chiều');
-    return `<li class="${other ? 'connected' : 'disconnected'}">${other ? '✓' : '○'} ${name}: ${other ? `đã nối ${MODULES[other.type].name}` : 'chưa nối'}</li>`;
-  }).join('');
+  const el = document.querySelector<HTMLDivElement>('#inspector')!;
+  el.classList.remove('hidden-by-user');
+  if (!id) {
+    el.classList.add('compact');
+    el.innerHTML = '<div class="empty">Chạm một mô-đun để xem thông tin.</div>';
+    return;
+  }
+
+  const m = graph.modules.get(id);
+  if (!m) return;
+  const d = MODULES[m.type];
   const disabled = mode === 'run' ? 'disabled' : '';
   const isToggle = m.type === 'switch' || m.type === 'valve' || m.type === 'door';
+  const canElevate = d.category === 'building' || d.category === 'nature' || d.category === 'transport' || d.category === 'structure';
+
+  const ports = d.ports.map(p => {
+    const edge = [...graph.connections.values()].find(c =>
+      (c.fromModuleId === id && c.fromPortId === p.id) || (c.toModuleId === id && c.toPortId === p.id)
+    );
+    const other = edge ? graph.modules.get(edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId) : undefined;
+    const signalName =
+      p.signal === 'power' ? 'Điện' :
+      p.signal === 'rotation' ? 'Truyền động' :
+      p.signal === 'fluid' ? 'Nước' : 'Khớp';
+    const direction = p.direction === 'out' ? 'ra' : p.direction === 'in' ? 'vào' : 'ghép';
+    return '<li class="' + (other ? 'connected' : 'disconnected') + '">' +
+      (other ? '✓ ' : '○ ') + signalName + ' ' + direction +
+      (other ? ': ' + MODULES[other.type].name : '') + '</li>';
+  }).join('');
+
   const switchHint = isToggle
-    ? '<div class="switch-hint">👆 Chạm 2 lần trực tiếp để ' +
-      (m.type === 'valve' ? 'mở/đóng van.' : m.type === 'door' ? 'mở/đóng cửa.' : 'bật/tắt nhanh.') +
+    ? '<div class="switch-hint">👆 Chạm 2 lần để ' +
+      (m.type === 'valve' ? 'mở/đóng van.' : m.type === 'door' ? 'mở/đóng cửa.' : 'bật/tắt công tắc.') +
       '</div>'
     : '';
+
   const toggleLabel = m.type === 'valve'
     ? (m.switchOn === false ? '🟢 Mở van' : '🔴 Đóng van')
     : m.type === 'door'
       ? (m.switchOn === true ? '🚪 Đóng cửa' : '🚪 Mở cửa')
-      : (m.switchOn === false ? '🟢 Bật công tắc' : '🔴 Tắt công tắc');
-  const canElevate = d.category === 'building' || d.category === 'nature' || d.category === 'transport' || d.category === 'structure';
-  const elevationButtons = canElevate ? '<div class="elevation-row"><button id="lowerPart" ' + disabled + '>⬇ Hạ</button><button id="raisePart" ' + disabled + '>⬆ Nâng</button></div>' : '';
-  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${elevationButtons}${isToggle ? `<button id="toggleSwitch">${toggleLabel}</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
+      : (m.switchOn === false ? '🟢 Bật' : '🔴 Tắt');
+
+  const elevationButtons = canElevate
+    ? '<div class="elevation-row"><button id="lowerPart" ' + disabled + '>⬇ Hạ</button><button id="raisePart" ' + disabled + '>⬆ Nâng</button></div>'
+    : '';
+
+  el.classList.add('compact');
+  el.innerHTML =
+    '<div class="inspect-title"><span>' + d.icon + '</span><div><b>' + d.name + '</b><small>' + d.description + '</small></div><button id="closeInspector" class="inspect-close" title="Đóng">×</button></div>' +
+    switchHint +
+    '<div class="inspect-actions primary-actions">' +
+      '<button id="rotatePart" ' + disabled + '>↻ Xoay</button>' +
+      '<button id="focusPart">◎ Nhìn gần</button>' +
+      (isToggle ? '<button id="toggleSwitch">' + toggleLabel + '</button>' : '') +
+    '</div>' +
+    '<button id="detailToggle" class="detail-toggle">ℹ Chi tiết & khớp nối</button>' +
+    '<div id="inspectDetails" class="inspect-details hidden">' +
+      '<p class="science">🧠 ' + d.science + '</p>' +
+      '<ul class="port-status" aria-label="Trạng thái kết nối">' + (ports || '<li>Không có cổng chức năng.</li>') + '</ul>' +
+      elevationButtons +
+      '<div class="inspect-actions"><button id="deletePart" class="danger" ' + disabled + '>🗑 Xóa</button></div>' +
+    '</div>';
+
+  document.querySelector<HTMLButtonElement>('#closeInspector')!.onclick = () => {
+    el.classList.add('hidden-by-user');
+    workbench.selectedId = null;
+  };
   document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected();
-  document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => workbench.removeSelected();
+  document.querySelector<HTMLButtonElement>('#focusPart')!.onclick = () => workbench.focusSelected();
+  document.querySelector<HTMLButtonElement>('#detailToggle')!.onclick = () => {
+    document.querySelector<HTMLElement>('#inspectDetails')!.classList.toggle('hidden');
+    el.classList.toggle('compact');
+  };
+
   const lower = document.querySelector<HTMLButtonElement>('#lowerPart');
   const raise = document.querySelector<HTMLButtonElement>('#raisePart');
   if (lower) lower.onclick = () => workbench.elevateSelected(-.5);
   if (raise) raise.onclick = () => workbench.elevateSelected(.5);
+
+  const del = document.querySelector<HTMLButtonElement>('#deletePart');
+  if (del) del.onclick = () => workbench.removeSelected();
+
   const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch');
   if (sw) sw.onclick = () => {
     workbench.toggleSwitch();
     const current = graph.modules.get(id);
-    if (current) {
-      renderInspector(id);
-      const text = current.type === 'valve'
-        ? (current.switchOn === false ? 'Van đã đóng. Nước bị chặn.' : 'Van đã mở. Nước có thể đi qua.')
-        : current.type === 'door'
-          ? (current.switchOn === true ? 'Cửa đã mở.' : 'Cửa đã đóng.')
-          : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
-      speak(text);
-    }
+    if (!current) return;
+    renderInspector(id);
+    const text = current.type === 'valve'
+      ? (current.switchOn === false ? 'Van đã đóng. Nước bị chặn.' : 'Van đã mở. Nước có thể đi qua.')
+      : current.type === 'door'
+        ? (current.switchOn === true ? 'Cửa đã mở.' : 'Cửa đã đóng.')
+        : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
+    speak(text);
   };
 }
 
-function renderMission(speakIt = false) {
-  const m = MISSIONS[missionIndex]; document.querySelector('#missionEmoji')!.textContent = m.emoji; document.querySelector('#missionTitle')!.textContent = m.title; document.querySelector('#missionDescription')!.textContent = m.description; document.querySelector('#missionLesson')!.textContent = `🔎 ${m.lesson}`; document.querySelector('#missionCount')!.textContent = `${missionIndex + 1}/${MISSIONS.length}`; localStorage.setItem('le3d-mission', String(missionIndex)); if (speakIt) speak(`${m.title}. ${m.description}`); updateMissionHint();
-}
 function updateMissionHint(state = simulator.evaluate()) {
   const feedback = getMissionFeedback(graph, MISSIONS[missionIndex], state, mode === 'run');
   coach.textContent = feedback.message;
@@ -376,7 +438,21 @@ document.querySelector<HTMLButtonElement>('#resetBtn')!.onclick = () => {
   showToast('🗑️ Đã làm sạch thế giới');
 };
 
-document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onclick = () => { document.querySelectorAll('[data-camera]').forEach(x => x.classList.remove('active')); b.classList.add('active'); workbench.setCamera(b.dataset.camera as 'iso' | 'top' | 'front'); });
+document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-camera]').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  workbench.setCamera(b.dataset.camera as 'iso' | 'top' | 'front' | 'rear' | 'left' | 'right');
+});
+document.querySelector<HTMLButtonElement>('#focusAllBtn')!.onclick = () => workbench.focusAll();
+document.querySelector<HTMLButtonElement>('#focusSelectedBtn')!.onclick = () => workbench.focusSelected();
+const cameraLockBtn = document.querySelector<HTMLButtonElement>('#cameraLockBtn')!;
+cameraLockBtn.onclick = () => {
+  const locked = !workbench.isCameraLocked();
+  workbench.setCameraLocked(locked);
+  cameraLockBtn.textContent = locked ? '🔒 Góc nhìn' : '🔓 Góc nhìn';
+  cameraLockBtn.classList.toggle('active', locked);
+  showToast(locked ? '🔒 Đã khóa góc nhìn' : '🔓 Có thể xoay và zoom góc nhìn');
+};
 
 const speechToggle = document.createElement('button');
 speechToggle.className = 'speech-toggle';
@@ -416,7 +492,7 @@ document.body.appendChild(audioToggle);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-6', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-7', {
         scope: './',
         updateViaCache: 'none',
       });
