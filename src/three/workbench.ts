@@ -162,6 +162,7 @@ export class Workbench {
   }
 
   private showSnapGhost(instance: ModuleInstance, preview: { position: [number, number, number]; rotationY: number } | null) {
+    if (typeof document === 'undefined' || !this.scene) return;
     if (!preview) {
       this.clearSnapGhost();
       return;
