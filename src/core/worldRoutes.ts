@@ -73,6 +73,7 @@ function nearestRouteModule(graph: ConnectionGraph, vehicle: ModuleInstance, all
 
 function singleModulePath(module: ModuleInstance, kind: RouteKind) {
   const def = MODULES[module.type];
+
   if (kind === 'runway') {
     const half = Math.max(1.7, def.size[2] * .46);
     return [
@@ -81,6 +82,33 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
       worldPoint(module, [0, 0, half]).toArray() as [number, number, number],
     ];
   }
+
+  if (module.type === 'road-curve' || module.type === 'rail-curve') {
+    const radius = module.type === 'road-curve' ? 1.28 : 1.3;
+    const points: [number, number, number][] = [];
+    const centerX = radius;
+    const centerZ = -radius;
+    for (let i = 0; i <= 8; i++) {
+      const angle = Math.PI - (Math.PI / 2) * (i / 8);
+      const local: [number, number, number] = [
+        centerX + Math.cos(angle) * radius,
+        0,
+        centerZ + Math.sin(angle) * radius,
+      ];
+      points.push(worldPoint(module, local).toArray() as [number, number, number]);
+    }
+    return points;
+  }
+
+  const structuralPorts = def.ports.filter(p => p.signal === 'structural');
+  if (structuralPorts.length === 2) {
+    return [
+      worldPoint(module, structuralPorts[0].position).toArray() as [number, number, number],
+      center(module).toArray() as [number, number, number],
+      worldPoint(module, structuralPorts[1].position).toArray() as [number, number, number],
+    ];
+  }
+
   const alongZ = def.size[2] >= def.size[0];
   const half = Math.max(1, (alongZ ? def.size[2] : def.size[0]) * .46);
   const a: [number, number, number] = alongZ ? [0, 0, -half] : [-half, 0, 0];
