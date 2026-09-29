@@ -218,6 +218,21 @@ describe('world route planner', () => {
     expect(route[0][2]).toBeLessThan(route[route.length - 1][2]);
   });
 
+  it('follows the same quarter-circle geometry as a rendered road curve', () => {
+    const g = new ConnectionGraph();
+    const car = module('curve-car','car-base');
+    const curve = module('curve-road','road-curve');
+    car.position = [.5,.65,-.5];
+    curve.position = [0,.65,0];
+    g.addModule(car); g.addModule(curve);
+    const route = buildVehicleRoute(g,car.id);
+    expect(route.length).toBeGreaterThan(6);
+    expect(route[0][0]).toBeCloseTo(0,1);
+    expect(route[0][2]).toBeCloseTo(-1.28,1);
+    expect(route[route.length - 1][0]).toBeCloseTo(1.28,1);
+    expect(route[route.length - 1][2]).toBeCloseTo(0,1);
+  });
+
   it('uses a nearby runway as a usable airplane route', () => {
     const g = new ConnectionGraph();
     const plane = module('route-plane', 'airplane');
@@ -284,6 +299,27 @@ describe('vehicle infrastructure rules', () => {
 });
 
 describe('vehicle and world-building missions', () => {
+  it('does not complete a car mission when the only road is far away', () => {
+    const mission = MISSIONS.find(m => m.id === 'car')!;
+    const g = new ConnectionGraph();
+    const chain = mission.requiredPath.map((type, i) => module('far-mission-' + i, type));
+    for (const m of chain) g.addModule(m);
+    const connect = (a: ModuleInstance, ap: string, z: ModuleInstance, zp: string) => {
+      const n = normalizeConnection(a, port(a.type, ap), z, port(z.type, zp))!;
+      g.connect({ id: a.id + '-' + z.id, ...n } as Connection);
+    };
+    connect(chain[0],'power-out',chain[1],'power-in');
+    connect(chain[1],'power-out',chain[2],'power-in');
+    connect(chain[2],'rotation-out',chain[3],'rotation-in');
+    connect(chain[3],'rotation-out',chain[4],'rotation-in');
+    connect(chain[4],'rotation-out',chain[5],'rotation-in');
+    const road = module('remote-road','road-straight');
+    road.position = [20,.65,20];
+    g.addModule(road);
+    const state = new SimulationEngine(g).evaluate();
+    expect(getMissionFeedback(g,mission,state,true).status).toBe('inactive');
+  });
+
   it('completes the car mission only when the powered drivetrain and road both exist', () => {
     const mission = MISSIONS.find(m => m.id === 'car')!;
     const g = new ConnectionGraph();
