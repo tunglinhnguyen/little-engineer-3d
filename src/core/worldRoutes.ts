@@ -28,17 +28,27 @@ function worldPoint(module: ModuleInstance, local: [number, number, number]) {
   );
 }
 
+function routeHeightOffset(module: ModuleInstance) {
+  return module.type === 'bridge' ? .72 : 0;
+}
+
+function routePoint(module: ModuleInstance, local: [number, number, number]) {
+  const point = worldPoint(module, local);
+  point.y += routeHeightOffset(module);
+  return point;
+}
+
 function connectionPoint(graph: ConnectionGraph, connection: Connection, moduleId: string): Vector3 | null {
   const module = graph.modules.get(moduleId);
   if (!module) return null;
   const portId = connection.fromModuleId === moduleId ? connection.fromPortId : connection.toPortId;
   const port = MODULES[module.type].ports.find(p => p.id === portId);
   if (!port) return null;
-  return worldPoint(module, port.position);
+  return routePoint(module, port.position);
 }
 
 function center(module: ModuleInstance) {
-  return new Vector3(module.position[0], module.position[1], module.position[2]);
+  return new Vector3(module.position[0], module.position[1] + routeHeightOffset(module), module.position[2]);
 }
 
 function structuralNeighbors(graph: ConnectionGraph, id: string, allowed: Set<ModuleType>) {
@@ -77,9 +87,9 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
   if (kind === 'runway') {
     const half = Math.max(1.7, def.size[2] * .46);
     return [
-      worldPoint(module, [0, 0, -half]).toArray() as [number, number, number],
-      worldPoint(module, [0, 0, 0]).toArray() as [number, number, number],
-      worldPoint(module, [0, 0, half]).toArray() as [number, number, number],
+      routePoint(module, [0, 0, -half]).toArray() as [number, number, number],
+      routePoint(module, [0, 0, 0]).toArray() as [number, number, number],
+      routePoint(module, [0, 0, half]).toArray() as [number, number, number],
     ];
   }
 
@@ -95,7 +105,7 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
         0,
         centerZ + Math.sin(angle) * radius,
       ];
-      points.push(worldPoint(module, local).toArray() as [number, number, number]);
+      points.push(routePoint(module, local).toArray() as [number, number, number]);
     }
     return points;
   }
@@ -103,9 +113,9 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
   const structuralPorts = def.ports.filter(p => p.signal === 'structural');
   if (structuralPorts.length === 2) {
     return [
-      worldPoint(module, structuralPorts[0].position).toArray() as [number, number, number],
+      routePoint(module, structuralPorts[0].position).toArray() as [number, number, number],
       center(module).toArray() as [number, number, number],
-      worldPoint(module, structuralPorts[1].position).toArray() as [number, number, number],
+      routePoint(module, structuralPorts[1].position).toArray() as [number, number, number],
     ];
   }
 
@@ -114,9 +124,9 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
   const a: [number, number, number] = alongZ ? [0, 0, -half] : [-half, 0, 0];
   const b: [number, number, number] = alongZ ? [0, 0, half] : [half, 0, 0];
   return [
-    worldPoint(module, a).toArray() as [number, number, number],
+    routePoint(module, a).toArray() as [number, number, number],
     center(module).toArray() as [number, number, number],
-    worldPoint(module, b).toArray() as [number, number, number],
+    routePoint(module, b).toArray() as [number, number, number],
   ];
 }
 
