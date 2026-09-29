@@ -184,6 +184,7 @@ export class Workbench {
   }
 
   cancelInteraction() { this.finishDrag(true); }
+  clearSelection() { this.select(null); }
 
   setCamera(name: 'iso' | 'top' | 'front' | 'rear' | 'left' | 'right') {
     const target = this.controls.target.clone();
