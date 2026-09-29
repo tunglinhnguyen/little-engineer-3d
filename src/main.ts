@@ -8,7 +8,6 @@ import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
 import { SoundEngine } from './ui/sound';
 import { vehicleCanTravel } from './core/vehicleRules';
-import { buildVehicleRoute, routeKindForVehicle } from './core/worldRoutes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
@@ -481,10 +480,12 @@ function evaluateRun() {
   if (feedback.status !== 'complete') {
     for (const module of graph.modules.values()) {
       if (!state.rpm.has(module.id) || MODULES[module.type].behavior.kind !== 'vehicle') continue;
-      const kind = routeKindForVehicle(module.type);
-      if (kind && buildVehicleRoute(graph, module.id).length < 2) {
-        const need = kind === 'road' ? 'đường ở ngay gần xe' : kind === 'rail' ? 'đường ray ở ngay gần đầu tàu' : 'đường băng ở ngay gần máy bay';
-        feedback = { status: 'inactive', message: '⚠️ ' + MODULES[module.type].name + ' đã có truyền động nhưng cần ' + need + ' để di chuyển.' };
+      const travel = vehicleCanTravel(graph, module.id, state.rpm);
+      if (!travel.ready) {
+        feedback = {
+          status: 'inactive',
+          message: '⚠️ ' + MODULES[module.type].name + ': ' + travel.message,
+        };
         coach.textContent = feedback.message;
         break;
       }
