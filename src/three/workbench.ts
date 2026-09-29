@@ -35,6 +35,7 @@ export class Workbench {
   private rpm = new Map<string, number>();
   private active = new Set<string>();
   private fluid = new Set<string>();
+  private labSign: THREE.Sprite | null = null;
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
@@ -52,9 +53,39 @@ export class Workbench {
 
   private addLabDecor() {
     const mat = new THREE.MeshStandardMaterial({ color: 0x23435a, roughness: .75 });
-    for (const x of [-8.6, 8.6]) { const tower = new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.2, 1.1), mat); tower.position.set(x, 1.6, -6.6); this.scene.add(tower); }
-    const sign = document.createElement('canvas'); sign.width = 512; sign.height = 150; const c = sign.getContext('2d')!; c.fillStyle = '#123047'; c.fillRect(0, 0, 512, 150); c.fillStyle = '#fff'; c.font = '800 46px system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STEAM LAB 3D', 256, 75);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sign) })); sprite.position.set(0, 4.2, -7.7); sprite.scale.set(5.6, 1.65, 1); this.scene.add(sprite);
+    for (const x of [-8.6, 8.6]) {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.2, 1.1), mat);
+      tower.position.set(x, 1.6, -6.6);
+      this.scene.add(tower);
+    }
+    this.labSign = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true }));
+    this.labSign.position.set(0, 4.2, -7.7);
+    this.labSign.scale.set(6.2, 1.65, 1);
+    this.scene.add(this.labSign);
+    this.setPlayerName('Bé');
+  }
+
+  setPlayerName(name: string) {
+    if (!this.labSign) return;
+    const clean = (name || 'Bé').trim().slice(0, 18);
+    const sign = document.createElement('canvas');
+    sign.width = 640;
+    sign.height = 170;
+    const ctx = sign.getContext('2d')!;
+    ctx.fillStyle = '#123047';
+    ctx.fillRect(0, 0, sign.width, sign.height);
+    ctx.fillStyle = '#9fe9ff';
+    ctx.font = '800 24px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('THẾ GIỚI KỸ SƯ CỦA', 320, 52);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 58px system-ui';
+    ctx.fillText(clean.toUpperCase(), 320, 115);
+    const old = this.labSign.material as THREE.SpriteMaterial;
+    old.map?.dispose();
+    old.map = new THREE.CanvasTexture(sign);
+    old.map.colorSpace = THREE.SRGBColorSpace;
+    old.needsUpdate = true;
   }
 
   addInstance(instance: ModuleInstance) {
@@ -208,7 +239,12 @@ export class Workbench {
         const angle = speed / 60 * Math.PI * 2 * dt;
         const rotors: THREE.Object3D[] = [];
         o.traverse(child => { if (child.userData.rotor) rotors.push(child); });
-        for (const rotor of rotors) rotor.rotation.x += angle * (rotor.userData.rotorFactor ?? 1);
+        for (const rotor of rotors) {
+          const amount = angle * (rotor.userData.rotorFactor ?? 1);
+          if (rotor.userData.rotorAxis === 'z') rotor.rotation.z += amount;
+          else if (rotor.userData.rotorAxis === 'y') rotor.rotation.y += amount;
+          else rotor.rotation.x += amount;
+        }
 
         const phase = now / 1000 * Math.max(.8, Math.abs(speed) / 60) * Math.PI * 2;
         o.traverse(child => {
@@ -251,6 +287,26 @@ export class Workbench {
           const pulse = on ? 1 + Math.sin(now * .045) * .06 : 1;
           cap.scale.set(pulse, 1, pulse);
         }
+      }
+
+      if (o.userData.vehicle) {
+        const moving = this.running && this.rpm.has(id);
+        const bounce = moving ? Math.sin(now * .012) * .018 : 0;
+        o.traverse(child => {
+          if (child.userData.vehicleBody) child.position.y += bounce - (child.userData.lastVehicleBounce ?? 0);
+          if (child.userData.speedEffect) child.visible = moving;
+          child.userData.lastVehicleBounce = child.userData.vehicleBody ? bounce : child.userData.lastVehicleBounce;
+        });
+      }
+
+      if (m.type === 'cloud') {
+        const drift = Math.sin(now * .00035 + id.length) * .12;
+        o.traverse(child => {
+          if (!child.userData.cloudPuff) return;
+          const base = child.userData.cloudBaseX ?? child.position.x;
+          child.userData.cloudBaseX = base;
+          child.position.x = base + drift;
+        });
       }
 
       let waterFx: THREE.Object3D | undefined;
