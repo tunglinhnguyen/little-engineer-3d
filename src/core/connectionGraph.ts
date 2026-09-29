@@ -87,6 +87,50 @@ export class ConnectionGraph {
     return best;
   }
 
+  attachModuleToTarget(id: string, targetId: string): boolean {
+    const moving = this.modules.get(id);
+    const target = this.modules.get(targetId);
+    if (!moving || !target || id === targetId) return false;
+
+    const axisY = new Vector3(0, 1, 0);
+    const targetPosition = new Vector3(...target.position);
+    const movingPosition = new Vector3(...moving.position);
+    let best: {
+      rotationY: number;
+      movingPort: PortDefinition;
+      targetPort: PortDefinition;
+      delta: Vector3;
+      distance: number;
+    } | null = null;
+
+    for (const rotationY of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      for (const movingPort of MODULES[moving.type].ports) {
+        if (this.isPortUsed(id, movingPort.id)) continue;
+        const movingAxis = new Vector3(...movingPort.axis).applyAxisAngle(axisY, rotationY);
+        const movingPortWorld = new Vector3(...movingPort.position).applyAxisAngle(axisY, rotationY).add(movingPosition);
+
+        for (const targetPort of MODULES[target.type].ports) {
+          if (this.isPortUsed(targetId, targetPort.id) || !portsCompatible(movingPort, targetPort)) continue;
+          const targetAxis = new Vector3(...targetPort.axis).applyAxisAngle(axisY, target.rotationY);
+          if (movingAxis.dot(targetAxis) >= -.72) continue;
+
+          const targetPortWorld = new Vector3(...targetPort.position).applyAxisAngle(axisY, target.rotationY).add(targetPosition);
+          const delta = targetPortWorld.clone().sub(movingPortWorld);
+          const distance = delta.length();
+          if (!best || distance < best.distance) best = { rotationY, movingPort, targetPort, delta, distance };
+        }
+      }
+    }
+
+    if (!best) return false;
+    moving.rotationY = best.rotationY;
+    moving.position = movingPosition.add(best.delta).toArray();
+    const connection = normalizeConnection(moving, best.movingPort, target, best.targetPort);
+    if (!connection) return false;
+    this.connect({ id: crypto.randomUUID(), ...connection });
+    return true;
+  }
+
   magnetizeModule(id: string, maxDistance = 1.05): boolean {
     const moving = this.modules.get(id);
     const nearest = this.snapCandidate(id, maxDistance);
