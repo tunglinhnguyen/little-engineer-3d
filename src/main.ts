@@ -315,7 +315,7 @@ function addModule(type: ModuleType) {
     type,
     position: contextualSpawnPosition(type) ?? findFreePosition(type),
     rotationY: 0,
-    switchOn: (type === 'switch' || type === 'valve') ? true : type === 'door' ? false : undefined,
+    switchOn: (type === 'switch' || type === 'valve') ? true : (type === 'door' || type === 'rail-switch') ? false : undefined,
   };
   const attachTo = workbench.selectedId;
   workbench.addInstance(instance, attachTo);
@@ -407,7 +407,7 @@ function renderInspector(id: string | null) {
   if (!m) return;
   const d = MODULES[m.type];
   const disabled = mode === 'run' ? 'disabled' : '';
-  const isToggle = m.type === 'switch' || m.type === 'valve' || m.type === 'door';
+  const isToggle = m.type === 'switch' || m.type === 'valve' || m.type === 'door' || m.type === 'rail-switch';
   const canElevate = d.category === 'building' || d.category === 'nature' || d.category === 'transport' || d.category === 'structure';
   const state = simulator.evaluate();
   let runtimeStatus = '';
@@ -487,7 +487,7 @@ function renderInspector(id: string | null) {
 
   const switchHint = isToggle
     ? '<div class="switch-hint">👆 Chạm 2 lần để ' +
-      (m.type === 'valve' ? 'mở/đóng van.' : m.type === 'door' ? 'mở/đóng cửa.' : 'bật/tắt công tắc.') +
+      (m.type === 'valve' ? 'mở/đóng van.' : m.type === 'door' ? 'mở/đóng cửa.' : m.type === 'rail-switch' ? 'đổi nhánh đường ray.' : 'bật/tắt công tắc.') +
       '</div>'
     : '';
 
@@ -495,7 +495,9 @@ function renderInspector(id: string | null) {
     ? (m.switchOn === false ? '🟢 Mở van' : '🔴 Đóng van')
     : m.type === 'door'
       ? (m.switchOn === true ? '🚪 Đóng cửa' : '🚪 Mở cửa')
-      : (m.switchOn === false ? '🟢 Bật' : '🔴 Tắt');
+      : m.type === 'rail-switch'
+        ? (m.switchOn === true ? '🔀 Chuyển về thẳng' : '🔀 Chuyển sang nhánh')
+        : (m.switchOn === false ? '🟢 Bật' : '🔴 Tắt');
 
   const elevationButtons = canElevate
     ? '<div class="elevation-row"><button id="lowerPart" ' + disabled + '>⬇ Hạ</button><button id="raisePart" ' + disabled + '>⬆ Nâng</button></div>'
@@ -562,7 +564,9 @@ function renderInspector(id: string | null) {
       ? (current.switchOn === false ? 'Van đã đóng. Nước bị chặn.' : 'Van đã mở. Nước có thể đi qua.')
       : current.type === 'door'
         ? (current.switchOn === true ? 'Cửa đã mở.' : 'Cửa đã đóng.')
-        : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
+        : current.type === 'rail-switch'
+          ? (current.switchOn === true ? 'Ghi đã chuyển sang nhánh rẽ.' : 'Ghi đang ở tuyến thẳng.')
+          : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
     speak(text);
   };
 }
