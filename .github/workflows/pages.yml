@@ -25,6 +25,21 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run check
       - run: npm run build
+      - name: Install Chromium for visual QA
+        run: npx playwright install --with-deps chromium
+      - name: Run 30-scenario visual QA
+        run: npm run qa:e2e
+      - name: Upload 30-feature QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-30-screenshots
+          path: |
+            test-results/qa
+            playwright-report
+            docs/qa-30-feature-matrix.md
+          if-no-files-found: warn
+          retention-days: 30
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
