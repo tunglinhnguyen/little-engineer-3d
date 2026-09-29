@@ -1186,7 +1186,11 @@ if (new URLSearchParams(location.search).has('qa')) {
   };
 }
 
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+if (
+  'serviceWorker' in navigator &&
+  !new URLSearchParams(location.search).has('qa') &&
+  (location.protocol === 'https:' || location.hostname === 'localhost')
+) {
   addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-8', {
