@@ -209,6 +209,7 @@ function evaluateRun() {
     if (completedMissionId !== null) { clearTimeout(toastTimer); toast.classList.add('hidden'); }
     completedMissionId = null;
   }
+  return feedback;
 }
 
 function setMode(next: 'build' | 'run') {
