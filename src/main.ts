@@ -549,6 +549,23 @@ function renderMission(announce = true) {
 }
 
 function updateMissionHint(state = simulator.evaluate()) {
+  if (activeTutorialId) {
+    const tutorial = TUTORIALS.find(t => t.id === activeTutorialId);
+    if (tutorial) {
+      const progress = tutorialProgress(tutorial,graph,state);
+      const message = progress.done
+        ? '🎓 Hoàn thành hướng dẫn ' + tutorial.title + '. Con có thể thử một cách thiết kế khác.'
+        : '🎓 ' + (progress.next?.title ?? tutorial.title) + ': ' + progress.summary;
+      coach.textContent = message;
+      renderTutorialProgress(state);
+      return { status: progress.done ? 'tutorial-complete' : 'tutorial', message };
+    }
+  }
+  if (sandboxMode) {
+    const message = '🧱 Sandbox: tự do xây, chạy thử và khám phá. Không bắt buộc theo nhiệm vụ.';
+    coach.textContent = message;
+    return { status: 'sandbox', message };
+  }
   const feedback = getMissionFeedback(graph, MISSIONS[missionIndex], state, mode === 'run');
   coach.textContent = feedback.message;
   return feedback;
