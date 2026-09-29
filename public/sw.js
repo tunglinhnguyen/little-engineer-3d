@@ -1,4 +1,4 @@
-const CACHE = 'little-engineer-3d-v3';
+const CACHE = 'little-engineer-3d-v4';
 const CORE = ['./', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
