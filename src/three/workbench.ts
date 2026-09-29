@@ -670,7 +670,8 @@ export class Workbench {
           }
 
           this.vehicleTravel.set(vehicleId, progress);
-          const yaw = Math.atan2(-frame.tangent.z, frame.tangent.x);
+          const baseYaw = Math.atan2(-frame.tangent.z, frame.tangent.x);
+          const yaw = vehicle.type === 'train-engine' ? baseYaw + Math.PI : baseYaw;
           const lift = vehicle.type === 'airplane' ? Math.sin(Math.PI * frame.t) ** 2 * 1.7 : 0;
           placeAssembly(vehicleId, frame.target, yaw, lift);
 
@@ -689,7 +690,7 @@ export class Workbench {
               if (!object) return;
               object.position.copy(wagonFrame.target);
               object.position.y = wagon.position[1];
-              object.rotation.y = Math.atan2(-wagonFrame.tangent.z, wagonFrame.tangent.x);
+              object.rotation.y = Math.atan2(-wagonFrame.tangent.z, wagonFrame.tangent.x) + Math.PI;
               moved.add(wagon.id);
             });
           }
