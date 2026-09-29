@@ -590,6 +590,7 @@ renderMission(false);
 function evaluateRun() {
   const state = simulator.evaluate();
   workbench.setSimulation(true, state.rpm, state.active, state.fluid);
+  workbench.setEnergyView(energyMode,state);
   sound.update(graph.modules.values(), state, true);
   const mission = MISSIONS[missionIndex];
   let feedback = updateMissionHint(state);
@@ -608,13 +609,29 @@ function evaluateRun() {
       }
     }
   }
-  if (feedback.status === 'complete') {
-    if (completedMissionId !== mission.id) { showToast('⭐ Nhiệm vụ hoàn thành!'); speak(mission.success); }
+  if (feedback.status === 'tutorial-complete') {
+    showToast('🎓 Hoàn thành hướng dẫn!');
+    activeTutorialId = null;
+    localStorage.removeItem('le3d-tutorial');
+    renderTutorialList();
+  } else if (!sandboxMode && !activeTutorialId && feedback.status === 'complete') {
+    if (completedMissionId !== mission.id) {
+      showToast('⭐ Nhiệm vụ hoàn thành!');
+      speak(mission.success);
+      progressStore.mission(mission.id);
+      progressStore.concept(
+        mission.id.includes('pump') || mission.id.includes('water') ? 'Nước & áp suất' :
+        ['car','motorcycle','train','airplane','helicopter','boat','firetruck'].includes(mission.id) ? 'Giao thông' :
+        ['house','city','landscape','bridge-world','two-storey-house','furnish-home','island-world','adventure-land'].includes(mission.id) ? 'Xây dựng & thế giới' :
+        ['gear','belt','piston','conveyor','winch','fan','drill','propeller'].includes(mission.id) ? 'Cơ khí' : 'Điện',
+      );
+    }
     completedMissionId = mission.id;
   } else {
     if (completedMissionId !== null) { clearTimeout(toastTimer); toast.classList.add('hidden'); }
     completedMissionId = null;
   }
+  updateProgress(state);
   return feedback;
 }
 
@@ -633,7 +650,10 @@ function setMode(next: 'build' | 'run') {
     completedMissionId = null;
     workbench.setSimulation(false, new Map(), new Set(), new Set());
     sound.stopAll();
-    updateMissionHint();
+    const state = simulator.evaluate();
+    workbench.setEnergyView(energyMode,state);
+    updateMissionHint(state);
+    updateProgress(state);
   }
   renderInspector(workbench.selectedId);
 }
