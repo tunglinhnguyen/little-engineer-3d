@@ -13,6 +13,7 @@ import { ProgressStore, ACHIEVEMENTS } from './core/progress';
 import { BLUEPRINTS, instantiateBlueprint } from './core/blueprints';
 import { TUTORIALS, tutorialProgress } from './core/tutorials';
 import { worldCollisionReport } from './core/physics';
+import { buildVehicleRoute } from './core/worldRoutes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
@@ -1086,6 +1087,104 @@ audioToggle.onclick = async () => {
 };
 document.body.appendChild(audioToggle);
 
+
+if (new URLSearchParams(location.search).has('qa')) {
+  const stateSnapshot = () => {
+    const state = simulator.evaluate();
+    return {
+      powered: [...state.powered],
+      active: [...state.active],
+      rpm: Object.fromEntries(state.rpm),
+      voltage: Object.fromEntries(state.voltage),
+      current: Object.fromEntries(state.current),
+      torque: Object.fromEntries(state.torque),
+      fluid: [...state.fluid],
+      flow: Object.fromEntries(state.flow),
+      pressure: Object.fromEntries(state.pressure),
+      faults: Object.fromEntries(state.faults),
+      modules: [...graph.modules.values()],
+      connections: [...graph.connections.values()],
+      collisions: worldCollisionReport(graph.modules.values()),
+      renderer: workbench.rendererInfo(),
+    };
+  };
+
+  (window as any).__LE3D_QA__ = {
+    loadGraph(data: { modules: ModuleInstance[]; connections: any[] }) {
+      if (mode === 'run') setMode('build');
+      graph.restore(data);
+      workbench.rebuildFromGraph();
+      history = [JSON.stringify(graph.serialize())];
+      historyIndex = 0;
+      updateHistoryButtons();
+      saveQuietly();
+      workbench.focusAll();
+      updateProgress();
+      return stateSnapshot();
+    },
+    reset() {
+      if (mode === 'run') setMode('build');
+      graph.restore({ modules: [], connections: [] });
+      workbench.rebuildFromGraph();
+      history = [JSON.stringify(graph.serialize())];
+      historyIndex = 0;
+      updateHistoryButtons();
+      return stateSnapshot();
+    },
+    run() { setMode('run'); return stateSnapshot(); },
+    stop() { setMode('build'); return stateSnapshot(); },
+    state: stateSnapshot,
+    select(id: string | null) { workbench.selectById(id); renderInspector(id); return stateSnapshot(); },
+    snap(id: string) {
+      const result = graph.snapModule(id);
+      workbench.rebuildFromGraph();
+      updateProgress();
+      return { result, state: stateSnapshot() };
+    },
+    route(id: string) { return buildVehicleRoute(graph,id); },
+    vehicle(id: string) { return vehicleCanTravel(graph,id,simulator.evaluate().rpm); },
+    feedback(id: string) {
+      const mission = MISSIONS.find(m => m.id === id);
+      return mission ? getMissionFeedback(graph,mission,simulator.evaluate(),mode==='run') : null;
+    },
+    addBlueprint(id: string, origin: [number,number,number] = [0,.65,0]) {
+      const blueprint = BLUEPRINTS.find(b => b.id === id);
+      if (!blueprint) return null;
+      const built = instantiateBlueprint(blueprint,origin);
+      for (const module of built.modules) graph.addModule(module);
+      for (const connection of built.connections) graph.connect(connection);
+      workbench.rebuildFromGraph();
+      recordHistory();
+      updateProgress();
+      workbench.focusAll();
+      return stateSnapshot();
+    },
+    energy(value: typeof energyMode) { energyMode=value; workbench.setEnergyView(value,simulator.evaluate()); return stateSnapshot(); },
+    engineer(value: boolean) { engineerMode=value; syncLearningMode(); return stateSnapshot(); },
+    sandbox(value: boolean) { sandboxMode=value; syncSandbox(); return stateSnapshot(); },
+    weather(value: 'clear'|'rain') { rainOn=value==='rain'; workbench.setWeather(value); return stateSnapshot(); },
+    day(value: 'day'|'night') { nightOn=value==='night'; workbench.setDayPhase(value); return stateSnapshot(); },
+    performance(value: boolean) { performanceOn=value; workbench.setPerformanceMode(value); return stateSnapshot(); },
+    xray(value: boolean) { xrayOn=value; workbench.setXRaySelected(value); return stateSnapshot(); },
+    explode(value: boolean) { explodedOn=value; workbench.setExplodedSelected(value); return stateSnapshot(); },
+    rendered(id: string) { return workbench.renderedTransform(id); },
+    camera(name: 'iso'|'top'|'front'|'rear'|'left'|'right') { workbench.setCamera(name); return workbench.rendererInfo(); },
+    audit() {
+      const state = simulator.evaluate();
+      return {
+        modules: graph.modules.size,
+        connections: graph.connections.size,
+        collisions: worldCollisionReport(graph.modules.values()).length,
+        faults: [...state.faults.entries()],
+        renderer: workbench.rendererInfo(),
+        palette: PALETTE.length,
+        missions: MISSIONS.length,
+        tutorials: TUTORIALS.length,
+        blueprints: BLUEPRINTS.length,
+      };
+    },
+  };
+}
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
