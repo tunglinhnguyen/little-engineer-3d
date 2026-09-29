@@ -465,7 +465,7 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
       const wr = rotorZ(g);
       wr.position.set(x, 0, 0);
       const tire = mesh(new THREE.TorusGeometry(.36, .11, 12, 26), std(0x222a2f));
-      tire.rotation.x = Math.PI / 2; wr.add(tire);
+      wr.add(tire);
       const spoke = mesh(new THREE.BoxGeometry(.05, .62, .05), std(0xb9c7cf, .35));
       wr.add(spoke);
     }
@@ -498,16 +498,16 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     g.remove(body);
     if (instance.type === 'road-straight') {
       const slab = mesh(new THREE.BoxGeometry(1.55, .1, 2.95), std(0x4f5559));
-      g.add(slab);
+      slab.position.y = -.55; g.add(slab);
       for (let z = -1.1; z <= 1.1; z += .55) {
         const dash = mesh(new THREE.BoxGeometry(.08, .025, .28), std(0xf6d86d));
-        dash.position.set(0, .07, z); g.add(dash);
+        dash.position.set(0, -.48, z); g.add(dash);
       }
     } else {
       const a = mesh(new THREE.BoxGeometry(1.15, .1, 2.3), std(0x4f5559));
-      a.position.x = .58; g.add(a);
+      a.position.set(.58, -.55, 0); g.add(a);
       const b = mesh(new THREE.BoxGeometry(2.3, .1, 1.15), std(0x4f5559));
-      b.position.z = -.58; g.add(b);
+      b.position.set(0, -.55, -.58); g.add(b);
     }
   }
 
@@ -517,11 +517,11 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
       for (const x of [-.42, .42]) {
         const rail = mesh(new THREE.BoxGeometry(rotated ? 2.7 : .08, .12, rotated ? .08 : 2.7), std(0x79848a, .55));
         if (rotated) rail.position.z = x; else rail.position.x = x;
-        rail.position.y = .12; g.add(rail);
+        rail.position.y = -.43; g.add(rail);
       }
       for (let p = -1.2; p <= 1.2; p += .3) {
         const sleeper = mesh(new THREE.BoxGeometry(rotated ? .08 : 1.1, .08, rotated ? 1.1 : .08), std(0x805b3c));
-        if (rotated) sleeper.position.x = p; else sleeper.position.z = p;
+        if (rotated) sleeper.position.set(p, -.55, 0); else sleeper.position.set(0, -.55, p);
         g.add(sleeper);
       }
     };
@@ -533,12 +533,12 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     g.remove(body);
     for (const r of [.72, 1.05]) {
       const rail = mesh(new THREE.TorusGeometry(r, .045, 8, 36, Math.PI / 2), std(0x79848a, .55));
-      rail.rotation.x = Math.PI / 2; rail.rotation.z = -Math.PI / 2; rail.position.set(-.1, .12, .1); g.add(rail);
+      rail.rotation.x = Math.PI / 2; rail.rotation.z = -Math.PI / 2; rail.position.set(-.1, -.43, .1); g.add(rail);
     }
     for (let i = 0; i <= 8; i++) {
       const a = i / 8 * Math.PI / 2;
       const sleeper = mesh(new THREE.BoxGeometry(.08, .07, .72), std(0x805b3c));
-      sleeper.position.set(Math.cos(a) * .88 - .1, 0, Math.sin(a) * .88 + .1);
+      sleeper.position.set(Math.cos(a) * .88 - .1, -.55, Math.sin(a) * .88 + .1);
       sleeper.rotation.y = -a; g.add(sleeper);
     }
   }
@@ -566,7 +566,11 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
       ? new THREE.MeshStandardMaterial({ color, transparent: true, opacity: .72, roughness: .2, metalness: .05 })
       : std(color);
     const tile = mesh(new THREE.BoxGeometry(...def.size), mat);
-    if (instance.type === 'water-tile' || instance.type === 'river-tile') tile.userData.waterSurface = true;
+    tile.position.y = -.55;
+    if (instance.type === 'water-tile' || instance.type === 'river-tile') {
+      tile.userData.waterSurface = true;
+      tile.userData.waterBaseY = -.55;
+    }
     g.add(tile);
   }
 
