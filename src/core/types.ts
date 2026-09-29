@@ -225,6 +225,7 @@ export interface Mission {
   description: string;
   lesson: string;
   requiredPath: ModuleType[];
+  alternativePaths?: ModuleType[][];
   requiredPaths?: ModuleType[][];
   requiredModules?: ModuleType[];
   buildOnly?: boolean;
