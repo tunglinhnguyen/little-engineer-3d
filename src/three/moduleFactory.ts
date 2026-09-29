@@ -21,7 +21,8 @@ function labelSprite(text: string) {
 function addPortVisual(group: THREE.Group, p: PortDefinition) {
   const color = p.signal === 'power' ? (p.direction === 'out' ? 0xff5252 : 0x4da6ff) : p.signal === 'rotation' ? 0xffcc43 : 0xa6b2bd;
   const ring = mesh(new THREE.TorusGeometry(.13, .04, 8, 20), new THREE.MeshBasicMaterial({ color }));
-  ring.position.set(...p.position); ring.rotation.y = Math.PI / 2; ring.userData.isPortVisual = true; group.add(ring);
+  ring.position.set(...p.position); ring.rotation.y = Math.PI / 2;
+  ring.userData.isPortVisual = true; ring.userData.portId = p.id; ring.userData.portColor = color; group.add(ring);
 }
 
 export function createModuleObject(instance: ModuleInstance): THREE.Group {
@@ -83,6 +84,11 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
   return g;
 }
 
-export function setPortVisualsVisible(group: THREE.Group, visible: boolean) {
-  group.traverse(o => { if (o.userData.isPortVisual) o.visible = visible; });
+export function setPortVisualsVisible(group: THREE.Group, visible: boolean, connectedPorts: Set<string> = new Set()) {
+  group.traverse(o => {
+    if (!o.userData.isPortVisual) return;
+    o.visible = visible;
+    const material = (o as THREE.Mesh).material;
+    if (material instanceof THREE.MeshBasicMaterial) material.color.setHex(connectedPorts.has(o.userData.portId) ? 0x16834b : o.userData.portColor);
+  });
 }

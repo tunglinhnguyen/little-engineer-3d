@@ -2,7 +2,7 @@ import './styles/app.css';
 import { ConnectionGraph } from './core/connectionGraph';
 import { MODULES, PALETTE } from './core/moduleRegistry';
 import { SimulationEngine } from './core/simulation';
-import { MISSIONS } from './core/missions';
+import { getMissionFeedback, MISSIONS } from './core/missions';
 import type { ModuleInstance, ModuleType } from './core/types';
 import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
@@ -39,6 +39,7 @@ const coach = document.querySelector<HTMLDivElement>('#coach')!;
 const toast = document.querySelector<HTMLDivElement>('#toast')!;
 const buildBtn = document.querySelector<HTMLButtonElement>('#buildBtn')!, runBtn = document.querySelector<HTMLButtonElement>('#runBtn')!;
 let toastTimer = 0;
+let completedMissionId: string | null = null;
 
 function showToast(text: string) { toast.textContent = text; toast.classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.classList.add('hidden'), 2200); }
 function save() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); localStorage.setItem('le3d-mission', String(missionIndex)); showToast('💾 Đã lưu phòng lab trên thiết bị'); }
@@ -48,7 +49,10 @@ load();
 const workbench = new Workbench(canvas, graph, {
   canEdit: () => mode === 'build',
   onSelect: renderInspector,
-  onGraphChanged: () => { saveQuietly(); updateMissionHint(); if (mode === 'run') evaluateRun(); },
+  onGraphChanged: () => {
+    saveQuietly(); renderInspector(workbench.selectedId);
+    if (mode === 'run') evaluateRun(); else updateMissionHint();
+  },
 });
 workbench.rebuildFromGraph();
 
@@ -58,16 +62,28 @@ function addModule(type: ModuleType) {
   if (mode !== 'build') { showToast('⏹ Dừng mô phỏng trước khi thay linh kiện'); return; }
   const id = `${type}-${crypto.randomUUID().slice(0, 8)}`; const spread = (graph.modules.size % 5) - 2;
   const instance: ModuleInstance = { id, type, position: [spread * 1.1, .65, 2.8 - Math.floor(graph.modules.size / 5) * .9], rotationY: 0, switchOn: type === 'switch' ? true : undefined };
-  workbench.addInstance(instance); coach.textContent = `Kéo ${MODULES[type].name} lại gần cổng cùng loại để tự ráp.`; speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description}`);
+  workbench.addInstance(instance); speak(`Đây là ${MODULES[type].name}. ${MODULES[type].description}`);
 }
 
 const parts = document.querySelector<HTMLDivElement>('#parts')!;
 for (const type of PALETTE) { const d = MODULES[type], b = document.createElement('button'); b.className = `part ${d.category}`; b.innerHTML = `<span>${d.icon}</span><b>${d.name}</b><small>${d.category}</small>`; b.onclick = () => addModule(type); parts.appendChild(b); }
+const palette = document.querySelector<HTMLElement>('.palette')!;
+const positionCoach = () => document.documentElement.style.setProperty('--palette-clearance', `${innerHeight - palette.getBoundingClientRect().top + 12}px`);
+new ResizeObserver(positionCoach).observe(palette);
+addEventListener('resize', positionCoach);
+positionCoach();
 
 function renderInspector(id: string | null) {
   const el = document.querySelector<HTMLDivElement>('#inspector')!; if (!id) { el.innerHTML = `<div class="empty">Chạm một mô-đun để xem thông tin.</div>`; return; }
   const m = graph.modules.get(id); if (!m) return; const d = MODULES[m.type];
-  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p><div class="inspect-actions"><button id="rotatePart">↻ Xoay 90°</button>${m.type === 'switch' ? `<button id="toggleSwitch">${m.switchOn === false ? '🟢 Bật' : '🔴 Tắt'} công tắc</button>` : ''}<button id="deletePart" class="danger">🗑 Xóa</button></div>`;
+  const ports = d.ports.map(p => {
+    const edge = [...graph.connections.values()].find(c => (c.fromModuleId === id && c.fromPortId === p.id) || (c.toModuleId === id && c.toPortId === p.id));
+    const other = edge ? graph.modules.get(edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId) : undefined;
+    const name = `${p.signal === 'power' ? 'Điện' : 'Truyền động'} ${p.direction === 'out' ? 'ra' : 'vào'}`;
+    return `<li class="${other ? 'connected' : 'disconnected'}">${other ? '✓' : '○'} ${name}: ${other ? `đã nối ${MODULES[other.type].name}` : 'chưa nối'}</li>`;
+  }).join('');
+  const disabled = mode === 'run' ? 'disabled' : '';
+  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p><ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${m.type === 'switch' ? `<button id="toggleSwitch">${m.switchOn === false ? '🟢 Bật' : '🔴 Tắt'} công tắc</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
   document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected(); document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => workbench.removeSelected();
   const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch'); if (sw) sw.onclick = () => { workbench.toggleSwitch(); const current = graph.modules.get(id); if (current) { renderInspector(id); speak(current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch đã nối đúng, điện sẽ chạy.'); } };
 }
@@ -75,24 +91,34 @@ function renderInspector(id: string | null) {
 function renderMission(speakIt = false) {
   const m = MISSIONS[missionIndex]; document.querySelector('#missionEmoji')!.textContent = m.emoji; document.querySelector('#missionTitle')!.textContent = m.title; document.querySelector('#missionDescription')!.textContent = m.description; document.querySelector('#missionLesson')!.textContent = `🔎 ${m.lesson}`; document.querySelector('#missionCount')!.textContent = `${missionIndex + 1}/${MISSIONS.length}`; localStorage.setItem('le3d-mission', String(missionIndex)); if (speakIt) speak(`${m.title}. ${m.description}`); updateMissionHint();
 }
-function updateMissionHint() { const m = MISSIONS[missionIndex], complete = graph.findPathByTypes(m.requiredPath); if (complete) coach.textContent = mode === 'run' ? m.success : '✅ Ráp đúng chuỗi rồi! Bấm ▶ Chạy để xem máy hoạt động.'; }
+function updateMissionHint(state = simulator.evaluate()) {
+  const feedback = getMissionFeedback(graph, MISSIONS[missionIndex], state, mode === 'run');
+  coach.textContent = feedback.message;
+  return feedback;
+}
 
-document.querySelector<HTMLButtonElement>('#prevMission')!.onclick = () => { missionIndex = (missionIndex - 1 + MISSIONS.length) % MISSIONS.length; renderMission(true); };
-document.querySelector<HTMLButtonElement>('#nextMission')!.onclick = () => { missionIndex = (missionIndex + 1) % MISSIONS.length; renderMission(true); };
+document.querySelector<HTMLButtonElement>('#prevMission')!.onclick = () => { missionIndex = (missionIndex - 1 + MISSIONS.length) % MISSIONS.length; completedMissionId = null; renderMission(true); if (mode === 'run') evaluateRun(); };
+document.querySelector<HTMLButtonElement>('#nextMission')!.onclick = () => { missionIndex = (missionIndex + 1) % MISSIONS.length; completedMissionId = null; renderMission(true); if (mode === 'run') evaluateRun(); };
 renderMission(false);
 
 function evaluateRun() {
-  const state = simulator.evaluate(); workbench.setSimulation(true, state.rpm, state.active); const mission = MISSIONS[missionIndex], chain = graph.findPathByTypes(mission.requiredPath);
-  const switchOff = [...graph.modules.values()].some(m => m.type === 'switch' && m.switchOn === false);
-  if (chain && !switchOff && mission.requiredPath.at(-1) && state.active.size > 1) { coach.textContent = `🎉 ${mission.success}`; showToast('⭐ Nhiệm vụ hoàn thành!'); speak(mission.success); }
-  else if (switchOff) { coach.textContent = 'Mạch đã ráp nhưng công tắc đang tắt. Hãy về chế độ Lắp ráp và bật công tắc.'; speak('Công tắc đang tắt. Con thử bật công tắc nhé.'); }
-  else { coach.textContent = 'Máy chưa chạy. Kiểm tra các cổng: đỏ/xanh là điện, vàng là chuyển động quay.'; }
+  const state = simulator.evaluate(); workbench.setSimulation(true, state.rpm, state.active);
+  const mission = MISSIONS[missionIndex], feedback = updateMissionHint(state);
+  if (feedback.status === 'complete') {
+    if (completedMissionId !== mission.id) { showToast('⭐ Nhiệm vụ hoàn thành!'); speak(mission.success); }
+    completedMissionId = mission.id;
+  } else {
+    if (completedMissionId !== null) { clearTimeout(toastTimer); toast.classList.add('hidden'); }
+    completedMissionId = null;
+  }
 }
 
 function setMode(next: 'build' | 'run') {
+  workbench.cancelInteraction();
   mode = next; buildBtn.classList.toggle('active', mode === 'build'); runBtn.classList.toggle('active', mode === 'run');
-  if (mode === 'run') { runBtn.textContent = '⏹ Dừng'; evaluateRun(); showToast('▶ Mô phỏng đang chạy'); }
-  else { runBtn.textContent = '▶ Chạy'; workbench.setSimulation(false, new Map(), new Set()); coach.textContent = 'Chế độ lắp ráp: kéo mô-đun để ráp hoặc chỉnh máy.'; }
+  if (mode === 'run') { runBtn.textContent = '⏹ Dừng'; showToast('▶ Mô phỏng đang chạy'); evaluateRun(); }
+  else { runBtn.textContent = '▶ Chạy'; completedMissionId = null; workbench.setSimulation(false, new Map(), new Set()); updateMissionHint(); }
+  renderInspector(workbench.selectedId);
 }
 buildBtn.onclick = () => setMode('build'); runBtn.onclick = () => setMode(mode === 'run' ? 'build' : 'run');
 

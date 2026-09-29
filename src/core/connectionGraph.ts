@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import { MODULES } from './moduleRegistry';
 import type { Connection, ModuleInstance, ModuleType, PortDefinition, SignalType } from './types';
 
@@ -43,21 +44,57 @@ export class ConnectionGraph {
   incoming(moduleId: string, signal?: SignalType): Connection[] {
     return [...this.connections.values()].filter(c => c.toModuleId === moduleId && (!signal || c.signal === signal));
   }
-  findPathByTypes(required: ModuleType[]): boolean {
+  snapModule(id: string): boolean {
+    const moving = this.modules.get(id);
+    if (!moving) return false;
+    const axisY = new Vector3(0, 1, 0);
+    const worldPort = (m: ModuleInstance, p: PortDefinition) =>
+      new Vector3(...p.position).applyAxisAngle(axisY, m.rotationY).add(new Vector3(...m.position));
+    const worldAxis = (m: ModuleInstance, p: PortDefinition) =>
+      new Vector3(...p.axis).applyAxisAngle(axisY, m.rotationY);
+    const candidates = () => {
+      const pairs: { movingPort: PortDefinition; other: ModuleInstance; otherPort: PortDefinition; distance: number; delta: Vector3 }[] = [];
+      for (const movingPort of MODULES[moving.type].ports) {
+        if (this.isPortUsed(id, movingPort.id)) continue;
+        for (const other of this.modules.values()) {
+          if (other.id === id) continue;
+          for (const otherPort of MODULES[other.type].ports) {
+            if (this.isPortUsed(other.id, otherPort.id) || !portsCompatible(movingPort, otherPort)) continue;
+            if (worldAxis(moving, movingPort).dot(worldAxis(other, otherPort)) >= -.6) continue;
+            const delta = worldPort(other, otherPort).sub(worldPort(moving, movingPort));
+            pairs.push({ movingPort, other, otherPort, distance: delta.length(), delta });
+          }
+        }
+      }
+      return pairs.sort((a, b) => a.distance - b.distance);
+    };
+    const nearest = candidates()[0];
+    if (!nearest || nearest.distance >= .72) return false;
+    // Align once, then connect every matching port without shifting the first joint.
+    moving.position = new Vector3(...moving.position).add(nearest.delta).toArray();
+    let connected = false;
+    for (const pair of candidates()) {
+      if (pair.distance > .12) continue;
+      if (this.isPortUsed(id, pair.movingPort.id) || this.isPortUsed(pair.other.id, pair.otherPort.id)) continue;
+      const connection = normalizeConnection(moving, pair.movingPort, pair.other, pair.otherPort);
+      if (connection) { this.connect({ id: crypto.randomUUID(), ...connection }); connected = true; }
+    }
+    return connected;
+  }
+  findPathByTypes(required: ModuleType[], accepts: (path: ModuleInstance[]) => boolean = () => true): boolean {
     if (!required.length) return true;
     const starts = [...this.modules.values()].filter(m => m.type === required[0]);
-    const visit = (id: string, index: number, seen: Set<string>): boolean => {
-      if (index === required.length - 1) return true;
+    const visit = (id: string, index: number, path: ModuleInstance[]): boolean => {
+      if (index === required.length - 1) return accepts(path);
       for (const edge of this.outgoing(id)) {
-        if (seen.has(edge.toModuleId)) continue;
+        if (path.some(m => m.id === edge.toModuleId)) continue;
         const next = this.modules.get(edge.toModuleId);
         if (!next || next.type !== required[index + 1]) continue;
-        const nextSeen = new Set(seen); nextSeen.add(next.id);
-        if (visit(next.id, index + 1, nextSeen)) return true;
+        if (visit(next.id, index + 1, [...path, next])) return true;
       }
       return false;
     };
-    return starts.some(start => visit(start.id, 0, new Set([start.id])));
+    return starts.some(start => visit(start.id, 0, [start]));
   }
   serialize() {
     return {

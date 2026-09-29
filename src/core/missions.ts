@@ -1,4 +1,27 @@
-import type { Mission } from './types';
+import { ConnectionGraph } from './connectionGraph';
+import { MODULES } from './moduleRegistry';
+import type { Mission, SimulationState } from './types';
+
+export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, state: SimulationState, running: boolean) {
+  const required = mission.requiredPath;
+  if (!graph.modules.size) return { status: 'incomplete', message: `Chọn ${MODULES[required[0]].name} ở kho để bắt đầu.` };
+  if (!graph.findPathByTypes(required)) {
+    const missing = required.filter(type => ![...graph.modules.values()].some(m => m.type === type));
+    if (missing.length) return { status: 'incomplete', message: `Cần thêm: ${missing.map(type => MODULES[type].name).join(', ')}.` };
+    for (let i = 0; i < required.length - 1; i++) {
+      if (!graph.findPathByTypes(required.slice(0, i + 2))) {
+        return { status: 'incomplete', message: `Chưa nối đủ chuỗi: ${MODULES[required[i]].name} → ${MODULES[required[i + 1]].name}. Kéo hai cổng lại gần nhau; cổng xanh lá là đã nối.` };
+      }
+    }
+  }
+  const switchesOn = graph.findPathByTypes(required, path => path.every(m => m.type !== 'switch' || m.switchOn !== false));
+  if (!switchesOn) return { status: 'switch-off', message: 'Công tắc trong mạch nhiệm vụ đang tắt. Chọn công tắc rồi bấm Bật công tắc.' };
+  const activePath = graph.findPathByTypes(required, path => path.every(m => state.active.has(m.id)));
+  if (!activePath) return { status: 'inactive', message: 'Chuỗi đã nối nhưng đầu ra chưa hoạt động. Kiểm tra nguồn điện và các cổng nối.' };
+  return running
+    ? { status: 'complete', message: `🎉 ${mission.success}` }
+    : { status: 'ready', message: '✅ Ráp đúng chuỗi rồi! Bấm ▶ Chạy để xem máy hoạt động.' };
+}
 
 export const MISSIONS: Mission[] = [
   {
