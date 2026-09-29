@@ -21,7 +21,7 @@ export class Workbench {
   readonly graph: ConnectionGraph;
   selectedId: string | null = null;
   private objects = new Map<string, THREE.Group>();
-  private floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), new THREE.MeshStandardMaterial({ color: 0xd9e5dc, roughness: .9 }));
+  private floor = new THREE.Mesh(new THREE.PlaneGeometry(64, 48), new THREE.MeshStandardMaterial({ color: 0xd9e5dc, roughness: .92 }));
   private ray = new THREE.Raycaster(); private pointer = new THREE.Vector2();
   private dragging = false; private dragOffset = new THREE.Vector3(); private dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -.65);
   private dragPointerId: number | null = null;
@@ -38,6 +38,7 @@ export class Workbench {
   private fluid = new Set<string>();
   private labSign: THREE.Sprite | null = null;
   private vehicleTravel = new Map<string, number>();
+  private cameraLocked = false;
 
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
@@ -48,9 +49,22 @@ export class Workbench {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.04;
-    this.scene.background = new THREE.Color(0xcde8f2); this.scene.fog = new THREE.Fog(0xcde8f2, 24, 50);
-    this.scene.add(this.root); this.camera.position.set(9.6, 9.2, 11.4);
-    this.controls = new OrbitControls(this.camera, canvas); this.controls.enableDamping = true; this.controls.target.set(0, 0, 0); this.controls.maxPolarAngle = Math.PI * .48; this.controls.minDistance = 5; this.controls.maxDistance = 26;
+    this.scene.background = new THREE.Color(0xcde8f2);
+    this.scene.fog = new THREE.Fog(0xcde8f2, 58, 110);
+    this.camera.far = 180;
+    this.camera.updateProjectionMatrix();
+    this.scene.add(this.root);
+    this.camera.position.set(14, 13, 17);
+    this.controls = new OrbitControls(this.camera, canvas);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = .08;
+    this.controls.target.set(0, 0, 0);
+    this.controls.maxPolarAngle = Math.PI * .49;
+    this.controls.minDistance = 4;
+    this.controls.maxDistance = 62;
+    this.controls.panSpeed = .8;
+    this.controls.rotateSpeed = .7;
+    this.controls.zoomSpeed = .8;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6b8478, 2.4));
     const sun = new THREE.DirectionalLight(0xfff7e9, 3.25);
     sun.position.set(-8, 13, 8);
@@ -59,23 +73,27 @@ export class Workbench {
     sun.shadow.bias = -.00035;
     sun.shadow.normalBias = .025;
     const shadowCamera = sun.shadow.camera as THREE.OrthographicCamera;
-    shadowCamera.left = -16; shadowCamera.right = 16; shadowCamera.top = 14; shadowCamera.bottom = -14;
+    shadowCamera.left = -28; shadowCamera.right = 28; shadowCamera.top = 24; shadowCamera.bottom = -24;
     shadowCamera.near = 1; shadowCamera.far = 40;
     this.scene.add(sun);
     this.floor.rotation.x = -Math.PI / 2; this.floor.position.y = 0; this.floor.receiveShadow = true; this.scene.add(this.floor);
-    const grid = new THREE.GridHelper(26, 52, 0x688b7b, 0xa7bfb1); grid.position.y = .012; this.scene.add(grid);
+    const grid = new THREE.GridHelper(56, 112, 0x688b7b, 0xa7bfb1);
+    grid.position.y = .012;
+    (grid.material as THREE.Material).opacity = .4;
+    (grid.material as THREE.Material).transparent = true;
+    this.scene.add(grid);
     this.addLabDecor(); this.bindPointer(); this.resize(); addEventListener('resize', () => this.resize()); requestAnimationFrame(t => this.loop(t));
   }
 
   private addLabDecor() {
     const mat = new THREE.MeshStandardMaterial({ color: 0x23435a, roughness: .75 });
-    for (const x of [-8.6, 8.6]) {
+    for (const x of [-15, 15]) {
       const tower = new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.2, 1.1), mat);
-      tower.position.set(x, 1.6, -6.6);
+      tower.position.set(x, 1.6, -19);
       this.scene.add(tower);
     }
     this.labSign = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true }));
-    this.labSign.position.set(0, 4.2, -7.7);
+    this.labSign.position.set(0, 4.2, -20);
     this.labSign.scale.set(6.2, 1.65, 1);
     this.scene.add(this.labSign);
     this.setPlayerName('Bé');
@@ -161,9 +179,56 @@ export class Workbench {
 
   cancelInteraction() { this.finishDrag(true); }
 
-  setCamera(name: 'iso' | 'top' | 'front') {
-    if (name === 'top') this.camera.position.set(0, 17, .01); else if (name === 'front') this.camera.position.set(0, 7.2, 13.8); else this.camera.position.set(9.6, 9.2, 11.4); this.controls.target.set(0, 0, 0); this.controls.update();
+  setCamera(name: 'iso' | 'top' | 'front' | 'rear' | 'left' | 'right') {
+    const target = this.controls.target.clone();
+    const distance = Math.max(12, this.camera.position.distanceTo(target));
+    if (name === 'top') this.camera.position.set(target.x, target.y + distance, target.z + .01);
+    else if (name === 'front') this.camera.position.set(target.x, target.y + distance * .38, target.z + distance);
+    else if (name === 'rear') this.camera.position.set(target.x, target.y + distance * .38, target.z - distance);
+    else if (name === 'left') this.camera.position.set(target.x - distance, target.y + distance * .38, target.z);
+    else if (name === 'right') this.camera.position.set(target.x + distance, target.y + distance * .38, target.z);
+    else this.camera.position.set(target.x + distance * .62, target.y + distance * .56, target.z + distance * .72);
+    this.camera.lookAt(target);
+    this.controls.update();
   }
+
+  focusAll() {
+    if (!this.objects.size) {
+      this.controls.target.set(0, 0, 0);
+      this.camera.position.set(14, 13, 17);
+      this.controls.update();
+      return;
+    }
+    const box = new THREE.Box3();
+    for (const object of this.objects.values()) box.expandByObject(object);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(4, size.length() * .58);
+    this.controls.target.copy(center);
+    this.camera.position.copy(center).add(new THREE.Vector3(radius * .72, radius * .65, radius));
+    this.camera.lookAt(center);
+    this.controls.update();
+  }
+
+  focusSelected() {
+    if (!this.selectedId) return;
+    const object = this.objects.get(this.selectedId);
+    if (!object) return;
+    const box = new THREE.Box3().setFromObject(object);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = Math.max(2.8, box.getSize(new THREE.Vector3()).length() * 1.8);
+    this.controls.target.copy(center);
+    this.camera.position.copy(center).add(new THREE.Vector3(size * .75, size * .6, size));
+    this.camera.lookAt(center);
+    this.controls.update();
+  }
+
+  setCameraLocked(locked: boolean) {
+    this.cameraLocked = locked;
+    this.controls.enabled = !locked && this.dragPointerId === null;
+  }
+
+  isCameraLocked() { return this.cameraLocked; }
 
   private select(id: string | null) {
     this.selectedId = id;
@@ -226,6 +291,11 @@ export class Workbench {
       o.position.set(Math.round(point.x * 4) / 4, this.dragOrigin.y, Math.round(point.z * 4) / 4);
       const m = this.graph.modules.get(this.dragModuleId)!;
       m.position = [o.position.x, o.position.y, o.position.z];
+      if (this.graph.magnetizeModule(m.id, .62)) {
+        o.position.set(...m.position);
+        o.rotation.y = m.rotationY;
+      }
+      this.refreshPorts();
     });
     this.canvas.addEventListener('pointerup', e => {
       if (e.pointerId !== this.dragPointerId) return;
@@ -258,7 +328,7 @@ export class Workbench {
   private finishDrag(cancelled: boolean) {
     if (this.dragPointerId === null) return;
     const pointerId = this.dragPointerId, id = this.dragModuleId, changed = this.dragging;
-    this.dragPointerId = null; this.dragModuleId = null; this.dragging = false; this.controls.enabled = true;
+    this.dragPointerId = null; this.dragModuleId = null; this.dragging = false; this.controls.enabled = !this.cameraLocked;
     const m = id ? this.graph.modules.get(id) : undefined, o = id ? this.objects.get(id) : undefined;
     if (changed && m && o) {
       if (cancelled) {
