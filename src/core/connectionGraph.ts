@@ -44,43 +44,104 @@ export class ConnectionGraph {
   incoming(moduleId: string, signal?: SignalType): Connection[] {
     return [...this.connections.values()].filter(c => c.toModuleId === moduleId && (!signal || c.signal === signal));
   }
-  snapModule(id: string): boolean {
+  private snapCandidate(id: string, maxDistance = 1.05) {
     const moving = this.modules.get(id);
-    if (!moving) return false;
+    if (!moving) return null;
     const axisY = new Vector3(0, 1, 0);
-    const worldPort = (m: ModuleInstance, p: PortDefinition) =>
-      new Vector3(...p.position).applyAxisAngle(axisY, m.rotationY).add(new Vector3(...m.position));
-    const worldAxis = (m: ModuleInstance, p: PortDefinition) =>
-      new Vector3(...p.axis).applyAxisAngle(axisY, m.rotationY);
-    const candidates = () => {
-      const pairs: { movingPort: PortDefinition; other: ModuleInstance; otherPort: PortDefinition; distance: number; delta: Vector3 }[] = [];
+    const worldPort = (m: ModuleInstance, p: PortDefinition, rotationY = m.rotationY) =>
+      new Vector3(...p.position).applyAxisAngle(axisY, rotationY).add(new Vector3(...m.position));
+    const worldAxis = (m: ModuleInstance, p: PortDefinition, rotationY = m.rotationY) =>
+      new Vector3(...p.axis).applyAxisAngle(axisY, rotationY);
+
+    let best: {
+      rotationY: number;
+      movingPort: PortDefinition;
+      other: ModuleInstance;
+      otherPort: PortDefinition;
+      distance: number;
+      delta: Vector3;
+    } | null = null;
+
+    const rotations = MODULES[moving.type].ports.length
+      ? [0, Math.PI / 2, Math.PI, Math.PI * 1.5].map(step => (moving.rotationY + step) % (Math.PI * 2))
+      : [moving.rotationY];
+
+    for (const rotationY of rotations) {
       for (const movingPort of MODULES[moving.type].ports) {
         if (this.isPortUsed(id, movingPort.id)) continue;
         for (const other of this.modules.values()) {
           if (other.id === id) continue;
           for (const otherPort of MODULES[other.type].ports) {
             if (this.isPortUsed(other.id, otherPort.id) || !portsCompatible(movingPort, otherPort)) continue;
-            if (worldAxis(moving, movingPort).dot(worldAxis(other, otherPort)) >= -.6) continue;
-            const delta = worldPort(other, otherPort).sub(worldPort(moving, movingPort));
-            pairs.push({ movingPort, other, otherPort, distance: delta.length(), delta });
+            if (worldAxis(moving, movingPort, rotationY).dot(worldAxis(other, otherPort)) >= -.72) continue;
+            const delta = worldPort(other, otherPort).sub(worldPort(moving, movingPort, rotationY));
+            const distance = delta.length();
+            if (distance > maxDistance) continue;
+            if (!best || distance < best.distance) {
+              best = { rotationY, movingPort, other, otherPort, distance, delta };
+            }
           }
         }
       }
-      return pairs.sort((a, b) => a.distance - b.distance);
-    };
-    const nearest = candidates()[0];
-    if (!nearest || nearest.distance >= .72) return false;
-    // Align once, then connect every matching port without shifting the first joint.
+    }
+    return best;
+  }
+
+  magnetizeModule(id: string, maxDistance = 1.05): boolean {
+    const moving = this.modules.get(id);
+    const nearest = this.snapCandidate(id, maxDistance);
+    if (!moving || !nearest) return false;
+    moving.rotationY = nearest.rotationY;
     moving.position = new Vector3(...moving.position).add(nearest.delta).toArray();
+    return true;
+  }
+
+  snapModule(id: string): boolean {
+    const moving = this.modules.get(id);
+    const nearest = this.snapCandidate(id, 1.05);
+    if (!moving || !nearest) return false;
+
+    moving.rotationY = nearest.rotationY;
+    moving.position = new Vector3(...moving.position).add(nearest.delta).toArray();
+
+    const axisY = new Vector3(0, 1, 0);
+    const worldPort = (m: ModuleInstance, p: PortDefinition) =>
+      new Vector3(...p.position).applyAxisAngle(axisY, m.rotationY).add(new Vector3(...m.position));
+    const worldAxis = (m: ModuleInstance, p: PortDefinition) =>
+      new Vector3(...p.axis).applyAxisAngle(axisY, m.rotationY);
+
+    const pairs: {
+      movingPort: PortDefinition;
+      other: ModuleInstance;
+      otherPort: PortDefinition;
+      distance: number;
+    }[] = [];
+
+    for (const movingPort of MODULES[moving.type].ports) {
+      if (this.isPortUsed(id, movingPort.id)) continue;
+      for (const other of this.modules.values()) {
+        if (other.id === id) continue;
+        for (const otherPort of MODULES[other.type].ports) {
+          if (this.isPortUsed(other.id, otherPort.id) || !portsCompatible(movingPort, otherPort)) continue;
+          if (worldAxis(moving, movingPort).dot(worldAxis(other, otherPort)) >= -.72) continue;
+          const distance = worldPort(other, otherPort).distanceTo(worldPort(moving, movingPort));
+          if (distance <= .16) pairs.push({ movingPort, other, otherPort, distance });
+        }
+      }
+    }
+
+    pairs.sort((a, b) => a.distance - b.distance);
     let connected = false;
-    for (const pair of candidates()) {
-      if (pair.distance > .12) continue;
+    for (const pair of pairs) {
       if (this.isPortUsed(id, pair.movingPort.id) || this.isPortUsed(pair.other.id, pair.otherPort.id)) continue;
       const connection = normalizeConnection(moving, pair.movingPort, pair.other, pair.otherPort);
-      if (connection) { this.connect({ id: crypto.randomUUID(), ...connection }); connected = true; }
+      if (!connection) continue;
+      this.connect({ id: crypto.randomUUID(), ...connection });
+      connected = true;
     }
     return connected;
   }
+
   findPathByTypes(required: ModuleType[], accepts: (path: ModuleInstance[]) => boolean = () => true): boolean {
     if (!required.length) return true;
     const starts = [...this.modules.values()].filter(m => m.type === required[0]);
