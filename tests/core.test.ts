@@ -110,7 +110,7 @@ describe('mission feedback', () => {
 });
 
 describe('all lesson assemblies', () => {
-  it.each(MISSIONS.filter(m => !m.requiredPaths?.length))('snaps, runs and stops the $id machine', mission => {
+  it.each(MISSIONS.filter(m => !m.requiredPaths?.length && !m.requiredModules?.length && !m.buildOnly))('snaps, runs and stops the $id machine', mission => {
     const graph = new ConnectionGraph();
     const chain = mission.requiredPath.map((type, i) => module(`part-${i}`, type));
     chain[0].position = [0, .65, 0]; graph.addModule(chain[0]);
@@ -156,6 +156,38 @@ function pointerHarness(editable = true) {
   const send = (type: string, x = 100, y = 100, pointerId = 1) => canvas.dispatchEvent(Object.assign(new Event(type), { clientX: x, clientY: y, button: 0, pointerId }));
   return { graph, sw, lamp, send, controls, hooks, workbench };
 }
+
+describe('vehicle and world-building missions', () => {
+  it('completes the car mission only when the powered drivetrain and road both exist', () => {
+    const mission = MISSIONS.find(m => m.id === 'car')!;
+    const g = new ConnectionGraph();
+    const chain = mission.requiredPath.map((type, i) => module('car-' + i, type));
+    for (const m of chain) g.addModule(m);
+    const connect = (a: ModuleInstance, ap: string, z: ModuleInstance, zp: string) => {
+      const n = normalizeConnection(a, port(a.type, ap), z, port(z.type, zp))!;
+      g.connect({ id: a.id + '-' + z.id, ...n } as Connection);
+    };
+    connect(chain[0],'power-out',chain[1],'power-in');
+    connect(chain[1],'power-out',chain[2],'power-in');
+    connect(chain[2],'rotation-out',chain[3],'rotation-in');
+    connect(chain[3],'rotation-out',chain[4],'rotation-in');
+    connect(chain[4],'rotation-out',chain[5],'rotation-in');
+    expect(getMissionFeedback(g, mission, new SimulationEngine(g).evaluate(), true).status).toBe('incomplete');
+    g.addModule(module('road','road-straight'));
+    const state = new SimulationEngine(g).evaluate();
+    expect(state.rpm.has(chain[5].id)).toBe(true);
+    expect(getMissionFeedback(g, mission, state, true).status).toBe('complete');
+  });
+
+  it('recognizes a house as a construction mission without requiring simulation power', () => {
+    const mission = MISSIONS.find(m => m.id === 'house')!;
+    const g = new ConnectionGraph();
+    for (const type of ['foundation','wall','door-wall','window-wall','roof'] as ModuleType[]) {
+      g.addModule(module('house-' + type, type));
+    }
+    expect(getMissionFeedback(g, mission, new SimulationEngine(g).evaluate(), false).status).toBe('complete');
+  });
+});
 
 describe('workbench pointer regressions', () => {
   it('keeps both connections and the lit lamp after a simple selection', () => {
