@@ -914,7 +914,9 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     }
   }
 
-  g.add(labelSprite(def.name));
+  if (def.category === 'energy' || def.category === 'control' || def.category === 'motion' || def.category === 'output' || def.category === 'fluid') {
+    g.add(labelSprite(def.name));
+  }
   def.ports.forEach(p => addPortVisual(g, p));
   g.position.set(...instance.position);
   g.rotation.y = instance.rotationY;
