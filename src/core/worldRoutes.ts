@@ -96,14 +96,14 @@ function singleModulePath(module: ModuleInstance, kind: RouteKind) {
   if (module.type === 'road-curve' || module.type === 'rail-curve') {
     const radius = module.type === 'road-curve' ? 1.28 : 1.3;
     const points: [number, number, number][] = [];
-    const centerX = radius;
-    const centerZ = -radius;
+    // The rendered quarter-circle is centered on the module origin:
+    // inlet at (0,-r), outlet at (+r,0).
     for (let i = 0; i <= 8; i++) {
-      const angle = Math.PI - (Math.PI / 2) * (i / 8);
+      const angle = (Math.PI / 2) * (1 - i / 8);
       const local: [number, number, number] = [
-        centerX + Math.cos(angle) * radius,
+        Math.cos(angle) * radius,
         0,
-        centerZ + Math.sin(angle) * radius,
+        -Math.sin(angle) * radius,
       ];
       points.push(routePoint(module, local).toArray() as [number, number, number]);
     }
