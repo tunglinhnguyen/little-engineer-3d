@@ -171,7 +171,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onc
 const speechToggle = document.createElement('button'); speechToggle.className = 'speech-toggle'; speechToggle.textContent = '🔊'; speechToggle.title = 'Bật/tắt hướng dẫn bằng giọng nói'; let speechOn = true; speechToggle.onclick = () => { speechOn = !speechOn; setSpeechEnabled(speechOn); speechToggle.textContent = speechOn ? '🔊' : '🔇'; }; document.body.appendChild(speechToggle);
 
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
   });
