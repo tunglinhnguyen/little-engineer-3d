@@ -158,7 +158,7 @@ function addModule(type: ModuleType) {
     type,
     position: findFreePosition(type),
     rotationY: 0,
-    switchOn: (type === 'switch' || type === 'valve') ? true : undefined,
+    switchOn: (type === 'switch' || type === 'valve') ? true : type === 'door' ? false : undefined,
   };
   workbench.addInstance(instance);
   showToast(`➕ Đã đặt ${MODULES[type].name} vào chỗ trống`);
@@ -244,11 +244,17 @@ function renderInspector(id: string | null) {
     return `<li class="${other ? 'connected' : 'disconnected'}">${other ? '✓' : '○'} ${name}: ${other ? `đã nối ${MODULES[other.type].name}` : 'chưa nối'}</li>`;
   }).join('');
   const disabled = mode === 'run' ? 'disabled' : '';
-  const isToggle = m.type === 'switch' || m.type === 'valve';
-  const switchHint = isToggle ? '<div class="switch-hint">👆 Chạm 2 lần trực tiếp để ' + (m.type === 'valve' ? 'mở/đóng van.' : 'bật/tắt nhanh.') + '</div>' : '';
+  const isToggle = m.type === 'switch' || m.type === 'valve' || m.type === 'door';
+  const switchHint = isToggle
+    ? '<div class="switch-hint">👆 Chạm 2 lần trực tiếp để ' +
+      (m.type === 'valve' ? 'mở/đóng van.' : m.type === 'door' ? 'mở/đóng cửa.' : 'bật/tắt nhanh.') +
+      '</div>'
+    : '';
   const toggleLabel = m.type === 'valve'
     ? (m.switchOn === false ? '🟢 Mở van' : '🔴 Đóng van')
-    : (m.switchOn === false ? '🟢 Bật công tắc' : '🔴 Tắt công tắc');
+    : m.type === 'door'
+      ? (m.switchOn === true ? '🚪 Đóng cửa' : '🚪 Mở cửa')
+      : (m.switchOn === false ? '🟢 Bật công tắc' : '🔴 Tắt công tắc');
   const canElevate = d.category === 'building' || d.category === 'nature' || d.category === 'transport' || d.category === 'structure';
   const elevationButtons = canElevate ? '<div class="elevation-row"><button id="lowerPart" ' + disabled + '>⬇ Hạ</button><button id="raisePart" ' + disabled + '>⬆ Nâng</button></div>' : '';
   el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${elevationButtons}${isToggle ? `<button id="toggleSwitch">${toggleLabel}</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
@@ -266,7 +272,9 @@ function renderInspector(id: string | null) {
       renderInspector(id);
       const text = current.type === 'valve'
         ? (current.switchOn === false ? 'Van đã đóng. Nước bị chặn.' : 'Van đã mở. Nước có thể đi qua.')
-        : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
+        : current.type === 'door'
+          ? (current.switchOn === true ? 'Cửa đã mở.' : 'Cửa đã đóng.')
+          : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
       speak(text);
     }
   };
