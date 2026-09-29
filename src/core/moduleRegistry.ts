@@ -447,13 +447,13 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   },
   streetlight: {
     type: 'streetlight', name: 'Đèn đường', icon: '💡', category: 'building',
-    description: 'Cột đèn cho đường phố.', science: 'Đèn đặt cao giúp phân bố ánh sáng trên diện tích rộng hơn.',
-    size: [.55, 2.2, .55], ports: [], behavior: { kind: 'structure' },
+    description: 'Cột đèn chỉ sáng khi được cấp điện.', science: 'Đèn đặt cao giúp phân bố ánh sáng trên diện tích rộng hơn; mạch điện phải kín mới phát sáng.',
+    size: [.55, 2.2, .55], ports: [{ ...LR.powerIn, position: [-.42, -.72, 0] }], behavior: { kind: 'power-output' },
   },
   'traffic-light': {
     type: 'traffic-light', name: 'Đèn giao thông', icon: '🚦', category: 'building',
-    description: 'Đèn tín hiệu cho nút giao.', science: 'Tín hiệu màu phân chia quyền đi theo thời gian để giảm xung đột giao thông.',
-    size: [.65, 2.0, .65], ports: [], behavior: { kind: 'structure' },
+    description: 'Đèn tín hiệu tự đổi đỏ – vàng – xanh khi có điện.', science: 'Bộ điều khiển phân chia quyền đi theo thời gian để giảm xung đột giao thông.',
+    size: [.65, 2.0, .65], ports: [{ ...LR.powerIn, position: [-.42, -.62, 0] }], behavior: { kind: 'power-output' },
   },
   hydrant: {
     type: 'hydrant', name: 'Trụ cứu hỏa', icon: '🧯', category: 'building',
