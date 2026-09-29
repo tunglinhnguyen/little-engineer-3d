@@ -452,6 +452,35 @@ export class Workbench {
   cancelInteraction() { this.finishDrag(true); }
   clearSelection() { this.select(null); }
 
+  selectById(id: string | null) {
+    if (id && !this.graph.modules.has(id)) return;
+    this.select(id);
+  }
+
+  renderedTransform(id: string) {
+    const object = this.objects.get(id);
+    if (!object) return null;
+    return {
+      position: object.position.toArray() as [number, number, number],
+      rotationY: object.rotation.y,
+    };
+  }
+
+  rendererInfo() {
+    return {
+      objects: this.objects.size,
+      drawCalls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+      pixelRatio: this.renderer.getPixelRatio(),
+      cameraLocked: this.cameraLocked,
+      cameraFollowSelected: this.cameraFollowSelected,
+      performanceMode: this.performanceMode,
+      weather: this.weather,
+      dayPhase: this.dayPhase,
+      energyMode: this.energyMode,
+    };
+  }
+
   setCamera(name: 'iso' | 'top' | 'front' | 'rear' | 'left' | 'right') {
     const target = this.controls.target.clone();
     const distance = Math.max(12, this.camera.position.distanceTo(target));
