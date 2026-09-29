@@ -50,11 +50,12 @@ describe('snapping complete circuits', () => {
     expect(graph.snapModule(sw.id)).toBe(true);
     expect(graph.connections.size).toBe(2);
   });
-  it('rejects ports facing the same way', () => {
+  it('auto-rotates a compatible part whose ports initially face the wrong way', () => {
     const { graph, sw } = setupLamp(false);
     sw.rotationY = Math.PI;
-    expect(graph.snapModule(sw.id)).toBe(false);
-    expect(graph.connections.size).toBe(0);
+    expect(graph.snapModule(sw.id)).toBe(true);
+    expect(graph.connections.size).toBe(2);
+    expect(sw.rotationY).not.toBe(Math.PI);
   });
   it('rejects electrical power connected directly to a rotation input', () => {
     const graph = new ConnectionGraph(), battery = module('b', 'battery'), fan = module('f', 'fan');
@@ -158,6 +159,41 @@ function pointerHarness(editable = true) {
   return { graph, sw, lamp, send, controls, hooks, workbench };
 }
 
+describe('smart assembly rules', () => {
+  it('auto-attaches a new switch to a selected battery and aligns the joint', () => {
+    const g = new ConnectionGraph();
+    const battery = module('auto-battery','battery');
+    const sw = module('auto-switch','switch');
+    battery.position = [0,.65,0];
+    sw.position = [6,.65,3];
+    g.addModule(battery);
+    g.addModule(sw);
+    expect(g.attachModuleToTarget(sw.id,battery.id)).toBe(true);
+    expect(g.connections.size).toBe(1);
+    expect(g.findPathByTypes(['battery','switch'])).toBe(true);
+  });
+
+  it('does not join a road directly to a building wall just because both are structural', () => {
+    const g = new ConnectionGraph();
+    const road = module('smart-road','road-straight');
+    const wall = module('smart-wall','wall');
+    g.addModule(road);
+    g.addModule(wall);
+    expect(g.attachModuleToTarget(wall.id,road.id)).toBe(false);
+    expect(g.connections.size).toBe(0);
+  });
+
+  it('joins road to road and rail to rail but not road to rail', () => {
+    const g = new ConnectionGraph();
+    const roadA = module('road-a2','road-straight');
+    const roadB = module('road-b2','road-curve');
+    const rail = module('rail-a2','rail-straight');
+    [roadA,roadB,rail].forEach(m=>g.addModule(m));
+    expect(g.attachModuleToTarget(roadB.id,roadA.id)).toBe(true);
+    expect(g.attachModuleToTarget(rail.id,roadA.id)).toBe(false);
+  });
+});
+
 describe('world route planner', () => {
   it('classifies vehicle infrastructure correctly', () => {
     expect(routeKindForVehicle('car-base')).toBe('road');
@@ -181,7 +217,7 @@ describe('world route planner', () => {
     expect(route[0][2]).toBeLessThan(route[route.length - 1][2]);
   });
 
-  it('uses a single runway as a usable airplane route', () => {
+  it('uses a nearby runway as a usable airplane route', () => {
     const g = new ConnectionGraph();
     const plane = module('route-plane', 'airplane');
     plane.position = [0, .65, 0];
@@ -192,6 +228,17 @@ describe('world route planner', () => {
     const route = buildVehicleRoute(g, plane.id);
     expect(route).toHaveLength(3);
     expect(Math.abs(route[2][2] - route[0][2])).toBeGreaterThan(3);
+  });
+
+  it('does not teleport a road vehicle to a remote road', () => {
+    const g = new ConnectionGraph();
+    const car = module('far-car','car-base');
+    car.position = [0,.65,0];
+    const road = module('far-road','road-straight');
+    road.position = [18,.65,18];
+    g.addModule(car);
+    g.addModule(road);
+    expect(buildVehicleRoute(g,car.id)).toHaveLength(0);
   });
 });
 
