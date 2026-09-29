@@ -122,8 +122,14 @@ export class Workbench {
     old.needsUpdate = true;
   }
 
-  addInstance(instance: ModuleInstance) {
-    this.graph.addModule(instance); const o = createModuleObject(instance); this.root.add(o); this.objects.set(instance.id, o); this.select(instance.id); this.hooks.onGraphChanged();
+  addInstance(instance: ModuleInstance, attachToId: string | null = null) {
+    this.graph.addModule(instance);
+    if (attachToId) this.graph.attachModuleToTarget(instance.id, attachToId);
+    const o = createModuleObject(instance);
+    this.root.add(o);
+    this.objects.set(instance.id, o);
+    this.select(instance.id);
+    this.hooks.onGraphChanged();
   }
 
   rebuildFromGraph() {
@@ -235,6 +241,7 @@ export class Workbench {
     this.refreshPorts();
     for (const [key, o] of this.objects) {
       o.traverse(x => {
+        if (x.userData.moduleLabel) x.visible = key === id;
         if (!(x as THREE.Mesh).isMesh || x.userData.isPortVisual) return;
         const mat = (x as THREE.Mesh).material;
         if (mat instanceof THREE.MeshStandardMaterial) mat.emissiveIntensity = key === id ? .12 : 0;
