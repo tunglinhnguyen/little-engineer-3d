@@ -610,18 +610,69 @@ export class Workbench {
           );
           const length = Math.max(1, curve.getLength());
           const unitsPerSecond = travelSpeed * (.65 + Math.abs(speed) / 120 * 1.25);
-          const progress = (this.vehicleTravel.get(vehicleId) ?? 0) + unitsPerSecond * dt / length;
-          this.vehicleTravel.set(vehicleId, progress);
+          const previousProgress = this.vehicleTravel.get(vehicleId) ?? 0;
+          let progress = previousProgress + unitsPerSecond * dt / length;
 
-          const cycle = progress % 2;
-          const reversing = cycle > 1;
-          const t = reversing ? 2 - cycle : cycle;
-          const target = curve.getPointAt(THREE.MathUtils.clamp(t, 0, 1));
-          const tangent = curve.getTangentAt(THREE.MathUtils.clamp(t, .001, .999));
-          if (reversing) tangent.multiplyScalar(-1);
-          const yaw = Math.atan2(-tangent.z, tangent.x);
-          const lift = vehicle.type === 'airplane' ? Math.sin(Math.PI * t) ** 2 * 1.7 : 0;
-          placeAssembly(vehicleId, target, yaw, lift);
+          const sample = (rawProgress: number) => {
+            const cycle = ((rawProgress % 2) + 2) % 2;
+            const reversing = cycle > 1;
+            const t = reversing ? 2 - cycle : cycle;
+            const clamped = THREE.MathUtils.clamp(t, 0, 1);
+            const target = curve.getPointAt(clamped);
+            const tangent = curve.getTangentAt(THREE.MathUtils.clamp(clamped, .001, .999));
+            if (reversing) tangent.multiplyScalar(-1);
+            return { reversing, t: clamped, target, tangent };
+          };
+
+          let frame = sample(progress);
+
+          // Powered road traffic lights are functional: road vehicles stop
+          // near a red light and continue automatically on yellow/green.
+          if (
+            routeKind === 'road' &&
+            (vehicle.type === 'car-base' || vehicle.type === 'motorcycle-base' || vehicle.type === 'firetruck')
+          ) {
+            const redPhase = (now / 1000) % 10 < 4;
+            if (redPhase) {
+              const redLightNearby = modules.some(light =>
+                light.type === 'traffic-light' &&
+                this.active.has(light.id) &&
+                Math.hypot(
+                  light.position[0] - frame.target.x,
+                  light.position[2] - frame.target.z,
+                ) < 1.35
+              );
+              if (redLightNearby) {
+                progress = previousProgress;
+                frame = sample(progress);
+              }
+            }
+          }
+
+          this.vehicleTravel.set(vehicleId, progress);
+          const yaw = Math.atan2(-frame.tangent.z, frame.tangent.x);
+          const lift = vehicle.type === 'airplane' ? Math.sin(Math.PI * frame.t) ** 2 * 1.7 : 0;
+          placeAssembly(vehicleId, frame.target, yaw, lift);
+
+          // Wagons follow the rail path independently instead of staying rigid
+          // beside the locomotive on curves.
+          if (vehicle.type === 'train-engine') {
+            const component = [...this.connectedComponent(vehicleId)]
+              .map(id => this.graph.modules.get(id))
+              .filter((m): m is ModuleInstance => Boolean(m) && m!.type === 'train-wagon');
+
+            component.forEach((wagon, index) => {
+              const gap = (index + 1) * 2.25 / length;
+              const wagonProgress = frame.reversing ? progress + gap : progress - gap;
+              const wagonFrame = sample(wagonProgress);
+              const object = this.objects.get(wagon.id);
+              if (!object) return;
+              object.position.copy(wagonFrame.target);
+              object.position.y = wagon.position[1];
+              object.rotation.y = Math.atan2(-wagonFrame.tangent.z, wagonFrame.tangent.x);
+              moved.add(wagon.id);
+            });
+          }
           continue;
         }
 
