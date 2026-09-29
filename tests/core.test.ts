@@ -250,4 +250,40 @@ describe('simulation graph', () => {
   }
   it('runs a fan chain when switch is on', () => { const g = setupFan(true), state = new SimulationEngine(g).evaluate(); expect(state.powered.has('m')).toBe(true); expect(state.rpm.get('f')).toBe(120); expect(g.findPathByTypes(['battery','switch','motor','shaft','fan'])).toBe(true); });
   it('stops at an open switch', () => { const g = setupFan(false), state = new SimulationEngine(g).evaluate(); expect(state.powered.has('m')).toBe(false); expect(state.rpm.has('f')).toBe(false); });
+
+  it('meshed 12-tooth and 24-tooth gears rotate opposite directions at half speed', () => {
+    const g = new ConnectionGraph();
+    const b = module('b2','battery'), s = module('s2','switch'), m = module('m2','motor');
+    const gs = module('gs','gear-small'), gl = module('gl','gear-large'), w = module('w','wheel');
+    [b,s,m,gs,gl,w].forEach(x => g.addModule(x));
+    const pairs: [ModuleInstance,string,ModuleInstance,string][] = [
+      [b,'power-out',s,'power-in'], [s,'power-out',m,'power-in'],
+      [m,'rotation-out',gs,'rotation-in'], [gs,'rotation-out',gl,'rotation-in'],
+      [gl,'rotation-out',w,'rotation-in'],
+    ];
+    for (const [a,ap,z,zp] of pairs) {
+      const n = normalizeConnection(a,port(a.type,ap),z,port(z.type,zp))!;
+      g.connect({ id: `${a.id}-${z.id}`, ...n } as Connection);
+    }
+    const state = new SimulationEngine(g).evaluate();
+    expect(state.rpm.get('gs')).toBe(120);
+    expect(state.rpm.get('gl')).toBe(-60);
+    expect(state.rpm.get('w')).toBe(-60);
+  });
+
+  it('hand crank is a mechanical rotation source without a battery', () => {
+    const g = new ConnectionGraph();
+    const crank = module('crank','hand-crank'), shaft = module('shaft2','shaft'), fan = module('fan2','fan');
+    [crank,shaft,fan].forEach(x => g.addModule(x));
+    for (const [a,ap,z,zp] of [
+      [crank,'rotation-out',shaft,'rotation-in'],
+      [shaft,'rotation-out',fan,'rotation-in'],
+    ] as [ModuleInstance,string,ModuleInstance,string][]) {
+      const n = normalizeConnection(a,port(a.type,ap),z,port(z.type,zp))!;
+      g.connect({ id: `${a.id}-${z.id}`, ...n } as Connection);
+    }
+    const state = new SimulationEngine(g).evaluate();
+    expect(state.rpm.get('fan2')).toBe(45);
+    expect(state.active.has('fan2')).toBe(true);
+  });
 });
