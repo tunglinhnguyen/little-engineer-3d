@@ -42,12 +42,26 @@ export class Workbench {
   constructor(private canvas: HTMLCanvasElement, graph: ConnectionGraph, private hooks: WorkbenchHooks) {
     this.graph = graph;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6)); this.renderer.shadowMap.enabled = true; this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.04;
     this.scene.background = new THREE.Color(0xcde8f2); this.scene.fog = new THREE.Fog(0xcde8f2, 24, 50);
     this.scene.add(this.root); this.camera.position.set(9.6, 9.2, 11.4);
     this.controls = new OrbitControls(this.camera, canvas); this.controls.enableDamping = true; this.controls.target.set(0, 0, 0); this.controls.maxPolarAngle = Math.PI * .48; this.controls.minDistance = 5; this.controls.maxDistance = 26;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6b8478, 2.4));
-    const sun = new THREE.DirectionalLight(0xffffff, 3.5); sun.position.set(-8, 13, 8); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); this.scene.add(sun);
+    const sun = new THREE.DirectionalLight(0xfff7e9, 3.25);
+    sun.position.set(-8, 13, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -.00035;
+    sun.shadow.normalBias = .025;
+    const shadowCamera = sun.shadow.camera as THREE.OrthographicCamera;
+    shadowCamera.left = -16; shadowCamera.right = 16; shadowCamera.top = 14; shadowCamera.bottom = -14;
+    shadowCamera.near = 1; shadowCamera.far = 40;
+    this.scene.add(sun);
     this.floor.rotation.x = -Math.PI / 2; this.floor.position.y = 0; this.floor.receiveShadow = true; this.scene.add(this.floor);
     const grid = new THREE.GridHelper(26, 52, 0x688b7b, 0xa7bfb1); grid.position.y = .012; this.scene.add(grid);
     this.addLabDecor(); this.bindPointer(); this.resize(); addEventListener('resize', () => this.resize()); requestAnimationFrame(t => this.loop(t));
