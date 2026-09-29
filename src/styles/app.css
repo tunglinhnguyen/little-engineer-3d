@@ -4,3 +4,7 @@
 .coach{bottom:var(--palette-clearance,154px);width:min(560px,calc(100% - 100px))}.speech-toggle{bottom:var(--palette-clearance,154px)}
 @media(max-width:760px){.camera-bar{bottom:calc(var(--palette-clearance,118px) + 56px)}}
 @media(max-width:520px){.mission{width:205px}.mission .lesson{display:none}.inspector{top:auto;bottom:180px;width:170px}.science{display:none}.camera-bar{display:none}.brand-icon{display:none}.port-status{font-size:10px}}
+
+.mission-head{position:relative}.mission-label{min-width:0;flex:1}.mission-toggle{flex:0 0 30px;width:30px;height:30px;border-radius:10px;background:#edf3f6;font-weight:950;font-size:18px;line-height:1}.mission.collapsed{width:auto;min-width:190px;padding:9px 10px}.mission.collapsed>p,.mission.collapsed>.lesson,.mission.collapsed>.mission-actions{display:none}.mission.collapsed .mission-head>span{font-size:25px}.mission.collapsed .mission-head{gap:7px}.switch-hint{font-size:10px;line-height:1.35;background:#fff7d8;border-radius:10px;padding:7px 8px;margin:7px 0;color:#765b12;font-weight:750}
+.part{transition:transform .12s ease,box-shadow .12s ease}.part:active{transform:translateY(2px);box-shadow:0 1px 0 #cbd8de}.parts{scrollbar-width:thin}
+@media(max-width:760px){.mission.collapsed{width:auto;min-width:158px}.mission.collapsed .mission-head b{font-size:11px}.mission-toggle{width:27px;height:27px;flex-basis:27px;font-size:16px}.switch-hint{font-size:9px}}
