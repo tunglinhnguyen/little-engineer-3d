@@ -16,7 +16,7 @@ const COLORS: Partial<Record<ModuleType, number>> = {
   chassis: 0x788896, axle: 0x8e9aa5, differential: 0x607889, gearbox: 0x6b8092,
   'car-base': 0xe55d5d, 'motorcycle-base': 0x436caa, 'train-engine': 0x4b9c68, 'train-wagon': 0xc58a4d,
   'road-straight': 0x555b60, 'road-curve': 0x555b60, 'road-crossing': 0x555b60, 'road-t-junction': 0x555b60,
-  'rail-straight': 0x69757d, 'rail-curve': 0x69757d, 'rail-crossing': 0x69757d, bridge: 0x8c8f91, 'rail-bridge': 0x7d858b,
+  'rail-straight': 0x69757d, 'rail-curve': 0x69757d, 'rail-crossing': 0x69757d, 'rail-switch': 0x69757d, 'train-station': 0xb98a58, bridge: 0x8c8f91, 'rail-bridge': 0x7d858b,
   foundation: 0xc9c3b7, wall: 0xe1b77b, 'door-wall': 0xd9a66d, 'window-wall': 0xd9a66d, roof: 0xb55b55, column: 0xd0c7ba, fence: 0x9a6f4c,
   'grass-tile': 0x70b55a, 'soil-tile': 0x9a6f48, 'water-tile': 0x54bde8, 'river-tile': 0x48b4df,
   hill: 0x76aa58, mountain: 0x879098, tree: 0x5f9d55, cloud: 0xf5f8fb, rock: 0x7f858a,
@@ -694,6 +694,52 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     };
     addLine(false);
     if (instance.type === 'rail-crossing') addLine(true);
+  }
+
+  if (instance.type === 'rail-switch') {
+    g.remove(body);
+    const railMat = std(0x79848a, .58);
+    const sleeperMat = std(0x805b3c);
+    for (const x of [-.42,.42]) {
+      const rail = mesh(new THREE.BoxGeometry(.08,.12,3.05),railMat.clone());
+      rail.position.set(x,-.43,0); g.add(rail);
+    }
+    for(let z=-1.35;z<=1.35;z+=.3){
+      const sleeper=mesh(new THREE.BoxGeometry(1.12,.07,.09),sleeperMat.clone());
+      sleeper.position.set(0,-.55,z);g.add(sleeper);
+    }
+    // Diverging branch. The route itself is selected by the turnout state.
+    for(const offset of [-.42,.42]){
+      const points:THREE.Vector3[]=[];
+      for(let i=0;i<=12;i++){
+        const t=i/12;
+        const x=t*t*1.52 + offset*(1-t);
+        const z=-.2 + t*1.72;
+        points.push(new THREE.Vector3(x,-.43,z));
+      }
+      const curve=new THREE.CatmullRomCurve3(points);
+      const tube=mesh(new THREE.TubeGeometry(curve,28,.045,7,false),railMat.clone());
+      g.add(tube);
+    }
+    const blade = mesh(new THREE.BoxGeometry(.055,.075,1.5),std(instance.switchOn===true?0x49c16d:0xe4b24e,.45));
+    blade.position.set(instance.switchOn===true?.15:-.15,-.39,-.55);
+    blade.rotation.y=instance.switchOn===true?-.17:.02;
+    blade.userData.turnoutBlade=true;
+    g.add(blade);
+    const lever=mesh(new THREE.BoxGeometry(.38,.09,.09),std(0xe2b645,.18));
+    lever.position.set(.88,-.28,-.95);lever.rotation.z=instance.switchOn===true?.55:-.55;g.add(lever);
+  }
+
+  if (instance.type === 'train-station') {
+    g.remove(body);
+    const railMat=std(0x79848a,.58);
+    for(const x of [-.42,.42]){const rail=mesh(new THREE.BoxGeometry(.08,.12,3.2),railMat.clone());rail.position.set(x,-.43,0);g.add(rail);}
+    for(let z=-1.4;z<=1.4;z+=.3){const sleeper=mesh(new THREE.BoxGeometry(1.08,.07,.09),std(0x805b3c));sleeper.position.set(0,-.55,z);g.add(sleeper);}
+    const platform=mesh(new THREE.BoxGeometry(1.15,.22,3.3),std(0xbcae9c));platform.position.set(1.18,-.39,0);g.add(platform);
+    const roof=mesh(new THREE.BoxGeometry(1.2,.12,2.45),std(0x527d91,.18));roof.position.set(1.18,.78,0);g.add(roof);
+    for(const z of [-.85,.85]){const post=mesh(new THREE.BoxGeometry(.08,1.1,.08),std(0x5b6870,.3));post.position.set(.85,.18,z);g.add(post);}
+    const sign=mesh(new THREE.BoxGeometry(.78,.32,.08),std(0x214a60,.12));sign.position.set(1.28,.65,-1.0);g.add(sign);
+    const bench=mesh(new THREE.BoxGeometry(.68,.12,.28),std(0x8f6848));bench.position.set(1.32,-.15,.45);g.add(bench);
   }
 
   if (instance.type === 'rail-curve') {
