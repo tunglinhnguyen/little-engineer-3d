@@ -91,7 +91,11 @@ export type ModuleType =
   | 'waterfall'
   | 'cave'
   | 'bush'
-  | 'flower';
+  | 'flower'
+  | 'custom-block'
+  | 'custom-power-block'
+  | 'custom-rotation-block'
+  | 'custom-fluid-block';
 
 export type SignalType = 'power' | 'rotation' | 'fluid' | 'structural';
 export type PortDirection = 'in' | 'out' | 'bi';
@@ -156,6 +160,12 @@ export interface ModuleInstance {
   position: Vector3Tuple;
   rotationY: number;
   switchOn?: boolean;
+  custom?: {
+    name?: string;
+    color?: number;
+    shape?: 'box' | 'cylinder';
+    size?: Vector3Tuple;
+  };
 }
 
 export interface Connection {
