@@ -202,6 +202,44 @@ nameBtn.onclick = () => {
 
 function saveQuietly() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); }
 
+function moduleName(instance: ModuleInstance | undefined) {
+  return instance?.custom?.name?.trim() || (instance ? MODULES[instance.type].name : '');
+}
+
+function updateProgress(state = simulator.evaluate()) {
+  const modules = [...graph.modules.values()];
+  const buildingCount = modules.filter(m => MODULES[m.type].category === 'building').length;
+  const hasRoad = modules.some(m => ['road-straight','road-curve','road-crossing','road-t-junction','bridge'].includes(m.type));
+  const hasTree = modules.some(m => m.type === 'tree' || m.type === 'bush' || m.type === 'flower');
+  const vehicleModules = modules.filter(m => MODULES[m.type].behavior.kind === 'vehicle');
+  const vehicleActive = vehicleModules.some(m => vehicleCanTravel(graph,m.id,state.rpm).ready);
+  const trainActive = modules.some(m => m.type === 'train-engine' && vehicleCanTravel(graph,m.id,state.rpm).ready);
+  const waterActive = modules.some(m => m.type === 'nozzle' && state.flow.has(m.id) && (state.flow.get(m.id) ?? 0) > .1);
+  const electricalActive = modules.some(m =>
+    MODULES[m.type].behavior.kind === 'power-output' && state.powered.has(m.id)
+  );
+
+  const newly = progressStore.evaluate({
+    moduleCount: modules.length,
+    electricalActive,
+    mechanicalCount: state.rpm.size,
+    waterActive,
+    vehicleActive,
+    trainActive,
+    architecturalCount: buildingCount,
+    cityLike: hasRoad && hasTree && buildingCount >= 3 && vehicleModules.length > 0,
+  });
+
+  if (newly.length) {
+    const award = newly[0];
+    showToast(award.icon + ' Mở khóa: ' + award.title);
+    speak('Chúc mừng. Con vừa nhận huy hiệu ' + award.title + '.');
+  }
+  renderProfile();
+  renderTutorialProgress(state);
+}
+
+
 function findFreePosition(type: ModuleType): [number, number, number] {
   const def = MODULES[type];
   const radius = Math.max(def.size[0], def.size[2]) * .5 + .22;
