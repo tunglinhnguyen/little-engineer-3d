@@ -1,5 +1,6 @@
 import { ConnectionGraph } from './connectionGraph';
 import { MODULES } from './moduleRegistry';
+import { vehicleCanTravel } from './vehicleRules';
 import type { Mission, ModuleType, SimulationState } from './types';
 
 function pathsFor(mission: Mission): ModuleType[][] {
@@ -76,6 +77,22 @@ export function getMissionFeedback(graph: ConnectionGraph, mission: Mission, sta
       status: 'inactive',
       message: 'Chuỗi đã nối nhưng máy chưa hoạt động. Kiểm tra nguồn, chiều truyền động và các cổng nối.',
     };
+  }
+
+  const terminalType = mission.requiredPath[mission.requiredPath.length - 1];
+  if (MODULES[terminalType]?.behavior.kind === 'vehicle') {
+    const vehicles = [...graph.modules.values()].filter(m => m.type === terminalType);
+    const runningVehicle = vehicles.find(v => vehicleCanTravel(graph, v.id, state.rpm).ready);
+    if (!runningVehicle) {
+      const candidate = vehicles.find(v => state.rpm.has(v.id)) ?? vehicles[0];
+      const reason = candidate
+        ? vehicleCanTravel(graph, candidate.id, state.rpm).message
+        : 'Chưa có phương tiện đúng loại.';
+      return {
+        status: 'inactive',
+        message: 'Phương tiện chưa thể chạy: ' + reason,
+      };
+    }
   }
 
   return running
