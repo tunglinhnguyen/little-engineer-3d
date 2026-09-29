@@ -60,6 +60,15 @@ export class ConnectionGraph {
     for (const [key, c] of this.connections) if (c.fromModuleId === id || c.toModuleId === id) this.connections.delete(key);
   }
   connect(connection: Connection) { this.connections.set(connection.id, connection); }
+  disconnectConnection(id: string) { this.connections.delete(id); }
+  disconnectPort(moduleId: string, portId: string) {
+    for (const [key, connection] of this.connections) {
+      if (
+        (connection.fromModuleId === moduleId && connection.fromPortId === portId) ||
+        (connection.toModuleId === moduleId && connection.toPortId === portId)
+      ) this.connections.delete(key);
+    }
+  }
   disconnectModule(id: string) {
     for (const [key, c] of this.connections) if (c.fromModuleId === id || c.toModuleId === id) this.connections.delete(key);
   }
