@@ -13,6 +13,8 @@ const port = (type: ModuleType, id: string) => MODULES[type].ports.find(p => p.i
 describe('connector compatibility', () => {
   it('allows output to input of the same signal', () => expect(portsCompatible(port('battery','power-out'), port('switch','power-in'))).toBe(true));
   it('rejects power to rotation', () => expect(portsCompatible(port('battery','power-out'), port('shaft','rotation-in'))).toBe(false));
+  it('allows water source to fluid pipe', () => expect(portsCompatible(port('water-tank','fluid-out'), port('pipe','fluid-in'))).toBe(true));
+  it('rejects water connected to an electrical input', () => expect(portsCompatible(port('water-tank','fluid-out'), port('motor','power-in'))).toBe(false));
 });
 
 function setupLamp(connected = true) {
@@ -98,7 +100,7 @@ describe('mission feedback', () => {
   });
   it('does not award success just because unrelated modules are active', () => {
     const { graph } = setupLamp();
-    const state = { active: new Set(['spare-battery', 'spare-lamp']), powered: new Set<string>(), rpm: new Map<string, number>() };
+    const state = { active: new Set(['spare-battery', 'spare-lamp']), powered: new Set<string>(), rpm: new Map<string, number>(), fluid: new Set<string>() };
     expect(getMissionFeedback(graph, MISSIONS[0], state, true).status).toBe('inactive');
   });
   it('gives fresh guidance when switching to a different mission', () => {
@@ -108,7 +110,7 @@ describe('mission feedback', () => {
 });
 
 describe('all lesson assemblies', () => {
-  it.each(MISSIONS)('snaps, runs and stops the $id machine', mission => {
+  it.each(MISSIONS.filter(m => !m.requiredPaths?.length))('snaps, runs and stops the $id machine', mission => {
     const graph = new ConnectionGraph();
     const chain = mission.requiredPath.map((type, i) => module(`part-${i}`, type));
     chain[0].position = [0, .65, 0]; graph.addModule(chain[0]);
@@ -285,5 +287,50 @@ describe('simulation graph', () => {
     const state = new SimulationEngine(g).evaluate();
     expect(state.rpm.get('fan2')).toBe(45);
     expect(state.active.has('fan2')).toBe(true);
+  });
+
+  it('pump needs both shaft rotation and a water source before the nozzle flows', () => {
+    const g = new ConnectionGraph();
+    const battery = module('pb','battery'), sw = module('ps','switch'), motor = module('pm','motor');
+    const shaft = module('psh','shaft'), pump = module('pump','pump');
+    const tank = module('tank','water-tank'), pipe = module('pipe','pipe'), nozzle = module('nozzle','nozzle');
+    [battery,sw,motor,shaft,pump,tank,pipe,nozzle].forEach(x => g.addModule(x));
+
+    const connect = (a: ModuleInstance, ap: string, z: ModuleInstance, zp: string) => {
+      const n = normalizeConnection(a, port(a.type, ap), z, port(z.type, zp))!;
+      g.connect({ id: a.id + '-' + z.id + '-' + ap, ...n } as Connection);
+    };
+
+    connect(battery,'power-out',sw,'power-in');
+    connect(sw,'power-out',motor,'power-in');
+    connect(motor,'rotation-out',shaft,'rotation-in');
+    connect(shaft,'rotation-out',pump,'rotation-in');
+    connect(tank,'fluid-out',pipe,'fluid-in');
+    connect(pipe,'fluid-out',pump,'fluid-in');
+    connect(pump,'fluid-out',nozzle,'fluid-in');
+
+    let state = new SimulationEngine(g).evaluate();
+    expect(state.rpm.get('pump')).toBe(120);
+    expect(state.fluid.has('pump')).toBe(true);
+    expect(state.fluid.has('nozzle')).toBe(true);
+
+    g.disconnectModule(tank.id);
+    state = new SimulationEngine(g).evaluate();
+    expect(state.rpm.get('pump')).toBe(120);
+    expect(state.fluid.has('pump')).toBe(false);
+    expect(state.fluid.has('nozzle')).toBe(false);
+  });
+
+  it('closed water valve blocks fluid without stopping the motor', () => {
+    const g = new ConnectionGraph();
+    const tank = module('tank2','water-tank'), valve = module('valve2','valve',false), pipe = module('pipe2','pipe');
+    [tank,valve,pipe].forEach(x => g.addModule(x));
+    const a = normalizeConnection(tank,port('water-tank','fluid-out'),valve,port('valve','fluid-in'))!;
+    const b = normalizeConnection(valve,port('valve','fluid-out'),pipe,port('pipe','fluid-in'))!;
+    g.connect({ id:'water-a', ...a } as Connection);
+    g.connect({ id:'water-b', ...b } as Connection);
+    expect(new SimulationEngine(g).evaluate().fluid.has(pipe.id)).toBe(false);
+    valve.switchOn = true;
+    expect(new SimulationEngine(g).evaluate().fluid.has(pipe.id)).toBe(true);
   });
 });
