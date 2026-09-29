@@ -820,7 +820,22 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
   }
 
   if (instance.type === 'door') {
-    g.remove(body); const d=mesh(new THREE.BoxGeometry(.88,1.58,.08),std(0x87542f)); g.add(d); const knob=mesh(new THREE.SphereGeometry(.06,10,8),std(0xd8b15a,.4)); knob.position.set(.3,0,.08);g.add(knob);
+    g.remove(body);
+    for (const x of [-.48,.48]) {
+      const jamb = mesh(new THREE.BoxGeometry(.08,1.72,.12),std(0x6f4b31));
+      jamb.position.x = x; g.add(jamb);
+    }
+    const lintel = mesh(new THREE.BoxGeometry(1.04,.09,.12),std(0x6f4b31));
+    lintel.position.y = .82; g.add(lintel);
+    const pivot = new THREE.Group();
+    pivot.position.set(-.43,-.02,0);
+    pivot.rotation.y = instance.switchOn === true ? -Math.PI / 2 : 0;
+    pivot.userData.doorLeaf = true;
+    g.add(pivot);
+    const leaf = mesh(new THREE.BoxGeometry(.86,1.56,.08),std(0x87542f));
+    leaf.position.x = .43; pivot.add(leaf);
+    const knob = mesh(new THREE.SphereGeometry(.055,10,8),std(0xd8b15a,.4));
+    knob.position.set(.72,0,.07); pivot.add(knob);
   }
 
   if (instance.type === 'chair') {
@@ -860,15 +875,24 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
   }
 
   if (instance.type === 'streetlight') {
-    g.remove(body); const pole=mesh(new THREE.CylinderGeometry(.05,.07,1.9,12),std(0x4d5960,.35));pole.position.y=.15;g.add(pole);
+    g.remove(body);
+    const pole=mesh(new THREE.CylinderGeometry(.05,.07,1.9,12),std(0x4d5960,.35));pole.position.y=.15;g.add(pole);
     const arm=mesh(new THREE.BoxGeometry(.55,.06,.06),std(0x4d5960,.35));arm.position.set(.23,1.08,0);g.add(arm);
-    const lamp=mesh(new THREE.SphereGeometry(.16,14,10),new THREE.MeshStandardMaterial({color:0xffe998,emissive:0xffc93d,emissiveIntensity:.7}));lamp.position.set(.48,1.03,0);g.add(lamp);
+    const lamp=mesh(new THREE.SphereGeometry(.16,14,10),new THREE.MeshStandardMaterial({color:0xffe998,emissive:0x000000,emissiveIntensity:0}));
+    lamp.position.set(.48,1.03,0); lamp.userData.lampBulb = true; g.add(lamp);
   }
 
   if (instance.type === 'traffic-light') {
-    g.remove(body); const pole=mesh(new THREE.CylinderGeometry(.05,.07,1.65,12),std(0x4c565c,.35));pole.position.y=.08;g.add(pole);
+    g.remove(body);
+    const pole=mesh(new THREE.CylinderGeometry(.05,.07,1.65,12),std(0x4c565c,.35));pole.position.y=.08;g.add(pole);
     const box=mesh(new THREE.BoxGeometry(.34,.75,.28),std(0x263039));box.position.set(0,.72,0);g.add(box);
-    [0xff3b30,0xffcc00,0x34c759].forEach((color,i)=>{const light=mesh(new THREE.SphereGeometry(.09,12,8),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:i===2?.6:.08}));light.position.set(0,.94-i*.22,.16);g.add(light);});
+    [0xff3b30,0xffcc00,0x34c759].forEach((color,i)=>{
+      const light=mesh(new THREE.SphereGeometry(.09,12,8),new THREE.MeshStandardMaterial({color,emissive:0x000000,emissiveIntensity:0}));
+      light.position.set(0,.94-i*.22,.16);
+      light.userData.trafficLamp = true;
+      light.userData.trafficIndex = i;
+      g.add(light);
+    });
   }
 
   if (instance.type === 'hydrant') {
