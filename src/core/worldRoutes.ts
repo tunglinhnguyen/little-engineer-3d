@@ -6,8 +6,8 @@ import { ConnectionGraph } from './connectionGraph';
 export type RouteKind = 'road' | 'rail' | 'runway';
 
 const ROUTE_TYPES: Record<RouteKind, Set<ModuleType>> = {
-  road: new Set<ModuleType>(['road-straight', 'road-curve', 'bridge']),
-  rail: new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'bridge']),
+  road: new Set<ModuleType>(['road-straight', 'road-curve', 'road-crossing', 'road-t-junction', 'bridge']),
+  rail: new Set<ModuleType>(['rail-straight', 'rail-curve', 'rail-crossing', 'rail-bridge']),
   runway: new Set<ModuleType>(['runway']),
 };
 
@@ -29,7 +29,7 @@ function worldPoint(module: ModuleInstance, local: [number, number, number]) {
 }
 
 function routeHeightOffset(module: ModuleInstance) {
-  return module.type === 'bridge' ? .72 : 0;
+  return module.type === 'bridge' || module.type === 'rail-bridge' ? .72 : 0;
 }
 
 function routePoint(module: ModuleInstance, local: [number, number, number]) {
