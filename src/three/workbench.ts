@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MODULES } from '../core/moduleRegistry';
-import { ConnectionGraph } from '../core/connectionGraph';
+import { ConnectionGraph, portsCompatible } from '../core/connectionGraph';
 import { buildVehicleRoute, routeKindForVehicle } from '../core/worldRoutes';
 import type { Connection, ModuleInstance } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
@@ -166,16 +166,32 @@ export class Workbench {
   }
 
   private select(id: string | null) {
+    this.selectedId = id;
     this.refreshPorts();
-    for (const [key, o] of this.objects) { o.traverse(x => { if ((x as THREE.Mesh).isMesh && !x.userData.isPortVisual) { const mat = (x as THREE.Mesh).material; if (mat instanceof THREE.MeshStandardMaterial) mat.emissiveIntensity = key === id ? .12 : 0; } }); }
-    this.selectedId = id; this.hooks.onSelect(id);
+    for (const [key, o] of this.objects) {
+      o.traverse(x => {
+        if (!(x as THREE.Mesh).isMesh || x.userData.isPortVisual) return;
+        const mat = (x as THREE.Mesh).material;
+        if (mat instanceof THREE.MeshStandardMaterial) mat.emissiveIntensity = key === id ? .12 : 0;
+      });
+    }
+    this.hooks.onSelect(id);
   }
 
   private refreshPorts() {
+    const selected = this.selectedId ? this.graph.modules.get(this.selectedId) : undefined;
+    const selectedPorts = selected ? MODULES[selected.type].ports : [];
     for (const [id, object] of this.objects) {
       const m = this.graph.modules.get(id);
       const connected = new Set(m ? MODULES[m.type].ports.filter(p => this.graph.isPortUsed(id, p.id)).map(p => p.id) : []);
-      setPortVisualsVisible(object, true, connected);
+      const compatibleTarget = Boolean(
+        this.dragging &&
+        selected &&
+        m &&
+        id !== selected.id &&
+        MODULES[m.type].ports.some(target => selectedPorts.some(source => portsCompatible(source, target)))
+      );
+      setPortVisualsVisible(object, id === this.selectedId || compatibleTarget, connected);
     }
   }
 
