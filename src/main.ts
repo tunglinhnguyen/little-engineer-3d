@@ -956,8 +956,8 @@ sandboxBtn.onclick = () => { sandboxMode = !sandboxMode; syncSandbox(); };
 syncSandbox();
 
 const energyBtn = document.querySelector<HTMLButtonElement>('#energyBtn')!;
-const energyModes: typeof energyMode[] = ['off','all','power','rotation','fluid'];
-const energyLabels: Record<typeof energyMode,string> = {
+const energyModes: Array<'off'|'all'|'power'|'rotation'|'fluid'> = ['off','all','power','rotation','fluid'];
+const energyLabels: Record<'off'|'all'|'power'|'rotation'|'fluid',string> = {
   off:'Tắt',all:'Tất cả',power:'Điện',rotation:'Mô-men',fluid:'Nước'
 };
 energyBtn.onclick = () => {
