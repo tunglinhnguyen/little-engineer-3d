@@ -45,6 +45,8 @@ export class Workbench {
   private labSign: THREE.Sprite | null = null;
   private vehicleTravel = new Map<string, number>();
   private vehicleYaw = new Map<string, number>();
+  private stationStopUntil = new Map<string, number>();
+  private stationLatch = new Map<string, string>();
   private cameraLocked = false;
   private cameraFollowSelected = false;
   private routeGuide = new THREE.Group();
@@ -443,7 +445,7 @@ export class Workbench {
     this.active = active;
     this.fluid = fluid;
     if (this.connectionLayer) this.connectionLayer.visible = !running;
-    if (!running) { this.vehicleTravel.clear(); this.vehicleYaw.clear(); }
+    if (!running) { this.vehicleTravel.clear(); this.vehicleYaw.clear(); this.stationStopUntil.clear(); this.stationLatch.clear(); }
   }
 
   cancelInteraction() { this.finishDrag(true); }
@@ -1044,6 +1046,31 @@ export class Workbench {
           };
 
           let frame = sample(progress);
+
+          // Train stations are functional. A train pauses once when it enters
+          // the platform zone, then continues after a short dwell time.
+          if (vehicle.type === 'train-engine') {
+            const station = modules.find(module =>
+              module.type === 'train-station' &&
+              Math.hypot(module.position[0] - frame.target.x, module.position[2] - frame.target.z) < 1.15
+            );
+            if (!station) {
+              this.stationLatch.delete(vehicleId);
+            } else {
+              const latched = this.stationLatch.get(vehicleId);
+              if (latched !== station.id && !this.stationStopUntil.has(vehicleId)) {
+                this.stationLatch.set(vehicleId, station.id);
+                this.stationStopUntil.set(vehicleId, now + 2200);
+              }
+              const until = this.stationStopUntil.get(vehicleId) ?? 0;
+              if (now < until) {
+                progress = previousProgress;
+                frame = sample(progress);
+              } else if (until) {
+                this.stationStopUntil.delete(vehicleId);
+              }
+            }
+          }
 
           // Powered road traffic lights are functional: road vehicles stop
           // near a red light and continue automatically on yellow/green.
