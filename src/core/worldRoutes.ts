@@ -252,8 +252,8 @@ export function buildVehicleRoute(graph: ConnectionGraph, vehicleId: string): [n
       });
     }
 
-    const currentModule = graph.modules.get(current)!;
-    const chosen =
+    const currentModule: ModuleInstance = graph.modules.get(current)!;
+    const chosen: { id: string; connection: Connection } =
       currentModule.type === 'rail-switch' && currentModule.switchOn === true && options.length > 1
         ? options[options.length - 1]
         : options[0];
