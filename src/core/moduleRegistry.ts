@@ -216,11 +216,11 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   },
   'road-curve': {
     type: 'road-curve', name: 'Đường cong', icon: '↪️', category: 'transport',
-    description: 'Đoạn đường đổi hướng 90 độ.', science: 'Bán kính cong càng lớn thì phương tiện đổi hướng càng êm.',
-    size: [2.4, .12, 2.4],
+    description: 'Đoạn đường đổi hướng 90 độ với bề rộng bằng đường thẳng.', science: 'Tâm làn xe đi theo cung tròn; bán kính cong quyết định độ gắt của quỹ đạo.',
+    size: [3.4, .12, 3.4],
     ports: [
-      { ...STRUCT_Z[0], position: [0, 0, -1.28], id: 'road-in' },
-      { ...STRUCT_X[1], position: [1.28, 0, 0], id: 'road-out' },
+      { ...STRUCT_Z[0], position: [0, 0, -.925], id: 'road-in' },
+      { ...STRUCT_X[1], position: [.925, 0, 0], id: 'road-out' },
     ],
     behavior: { kind: 'structure' },
   },
@@ -249,11 +249,11 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   },
   'rail-curve': {
     type: 'rail-curve', name: 'Ray cong', icon: '🚉', category: 'transport',
-    description: 'Đoạn ray đổi hướng 90 độ.', science: 'Ray cong dẫn hướng đoàn tàu theo quỹ đạo mà không cần đánh lái.',
-    size: [2.5, .2, 2.5],
+    description: 'Đoạn ray đổi hướng 90 độ, giữ nguyên khổ ray.', science: 'Hai thanh ray đồng tâm dẫn bánh tàu theo cung cong; khoảng cách hai ray phải không đổi.',
+    size: [3.3, .2, 3.3],
     ports: [
-      { ...STRUCT_Z[0], position: [0, 0, -1.3], id: 'rail-in' },
-      { ...STRUCT_X[1], position: [1.3, 0, 0], id: 'rail-out' },
+      { ...STRUCT_Z[0], position: [0, 0, -1.15], id: 'rail-in' },
+      { ...STRUCT_X[1], position: [1.15, 0, 0], id: 'rail-out' },
     ],
     behavior: { kind: 'structure' },
   },
