@@ -125,7 +125,8 @@ export class ConnectionGraph {
       const normalized = normalizeConnection(from, fromPort, to, toPort);
       if (!normalized || normalized.signal !== c.signal) return;
       if (this.isPortUsed(normalized.fromModuleId, normalized.fromPortId) || this.isPortUsed(normalized.toModuleId, normalized.toPortId)) return;
-      this.connections.set(c.id || crypto.randomUUID(), { id: c.id || crypto.randomUUID(), ...normalized });
+      const id = c.id || crypto.randomUUID();
+      this.connections.set(id, { id, ...normalized });
     };
 
     if ((data.version ?? 1) >= 2) {
