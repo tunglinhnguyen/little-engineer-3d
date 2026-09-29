@@ -12,7 +12,14 @@ export type ModuleType =
   | 'drill'
   | 'lamp'
   | 'sensor'
-  | 'chassis';
+  | 'chassis'
+  | 'solar'
+  | 'hand-crank'
+  | 'bearing'
+  | 'propeller'
+  | 'pump'
+  | 'buzzer'
+  | 'led';
 
 export type SignalType = 'power' | 'rotation' | 'structural';
 export type PortDirection = 'in' | 'out' | 'bi';
@@ -35,9 +42,10 @@ export interface ModuleDefinition {
   size: Vector3Tuple;
   ports: PortDefinition[];
   behavior: {
-    kind: 'source' | 'switch' | 'motor' | 'pass-rotation' | 'gear' | 'rotation-output' | 'power-output' | 'sensor' | 'structure';
+    kind: 'source' | 'rotation-source' | 'switch' | 'motor' | 'pass-rotation' | 'gear' | 'rotation-output' | 'power-output' | 'sensor' | 'structure';
     rpm?: number;
     ratio?: number;
+    teeth?: number;
   };
 }
 
