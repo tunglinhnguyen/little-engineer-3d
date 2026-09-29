@@ -255,9 +255,10 @@ export class Workbench {
   }
 
   private refreshRouteGuide() {
+    if (!this.routeGuide) return;
     while (this.routeGuide.children.length) {
-      const child = this.routeGuide.children.pop();
-      if (!child) break;
+      const child = this.routeGuide.children[0];
+      this.routeGuide.remove(child);
       if ((child as THREE.Line).geometry) (child as THREE.Line).geometry.dispose();
       const material = (child as THREE.Line).material;
       if (material instanceof THREE.Material) material.dispose();
