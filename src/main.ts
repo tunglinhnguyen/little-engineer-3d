@@ -48,6 +48,7 @@ app.innerHTML = `
     <button data-camera="right">◨ Phải</button>
     <button id="focusAllBtn" title="Nhìn toàn bộ thế giới">⌗ Toàn cảnh</button>
     <button id="focusSelectedBtn" title="Nhìn gần mô-đun đang chọn">◎ Vật chọn</button>
+    <button id="followCameraBtn" title="Theo mô-đun đang chọn khi nó di chuyển">🎥 Theo vật</button>
     <button id="cameraLockBtn" title="Khóa/mở xoay góc nhìn">🔓 Góc nhìn</button>
   </nav>
   <section class="palette panel">
@@ -562,6 +563,14 @@ document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onc
 });
 document.querySelector<HTMLButtonElement>('#focusAllBtn')!.onclick = () => workbench.focusAll();
 document.querySelector<HTMLButtonElement>('#focusSelectedBtn')!.onclick = () => workbench.focusSelected();
+const followCameraBtn = document.querySelector<HTMLButtonElement>('#followCameraBtn')!;
+followCameraBtn.onclick = () => {
+  const enabled = !workbench.isCameraFollowSelected();
+  workbench.setCameraFollowSelected(enabled);
+  followCameraBtn.classList.toggle('active', enabled);
+  followCameraBtn.textContent = enabled ? '🎥 Đang theo' : '🎥 Theo vật';
+  showToast(enabled ? '🎥 Camera sẽ theo mô-đun đang chọn' : '🎥 Đã tắt camera theo vật');
+};
 const cameraLockBtn = document.querySelector<HTMLButtonElement>('#cameraLockBtn')!;
 cameraLockBtn.onclick = () => {
   const locked = !workbench.isCameraLocked();
