@@ -355,14 +355,34 @@ export class Workbench {
   private connectedComponent(startId: string) {
     const seen = new Set<string>([startId]);
     const queue = [startId];
+    const trainTypes = new Set(['train-engine', 'train-wagon']);
+
     while (queue.length) {
       const id = queue.shift()!;
+      const current = this.graph.modules.get(id);
+      if (!current) continue;
+
       const edges = [...this.graph.incoming(id), ...this.graph.outgoing(id)];
       for (const edge of edges) {
-        const other = edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId;
-        if (seen.has(other)) continue;
-        seen.add(other);
-        queue.push(other);
+        const otherId = edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId;
+        if (seen.has(otherId)) continue;
+        const other = this.graph.modules.get(otherId);
+        if (!other) continue;
+
+        const driveLink = edge.signal === 'power' || edge.signal === 'rotation';
+        const trainCoupler =
+          edge.signal === 'structural' &&
+          trainTypes.has(current.type) &&
+          trainTypes.has(other.type);
+        const mountedNozzle =
+          edge.signal === 'fluid' &&
+          id === startId &&
+          edge.fromModuleId === startId &&
+          other.type === 'nozzle';
+
+        if (!driveLink && !trainCoupler && !mountedNozzle) continue;
+        seen.add(otherId);
+        if (!mountedNozzle) queue.push(otherId);
       }
     }
     return seen;
