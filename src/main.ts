@@ -7,6 +7,7 @@ import type { ModuleCategory, ModuleInstance, ModuleType } from './core/types';
 import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
 import { SoundEngine } from './ui/sound';
+import { buildVehicleRoute, routeKindForVehicle } from './core/worldRoutes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const savedPlayerName = (localStorage.getItem('le3d-player-name') ?? '').trim().slice(0, 18);
@@ -160,13 +161,42 @@ function findFreePosition(type: ModuleType): [number, number, number] {
   return [((n % 7) - 3) * 1.65, .65, -5.8 - Math.floor(n / 7) * 1.5];
 }
 
+function contextualSpawnPosition(type: ModuleType): [number, number, number] | null {
+  const selectedId = workbench.selectedId;
+  const selected = selectedId ? graph.modules.get(selectedId) : undefined;
+  if (!selected) return null;
+
+  const pair = new Set([selected.type, type]);
+  const atSelected = (): [number, number, number] => [selected.position[0], selected.position[1], selected.position[2]];
+
+  if ((selected.type === 'car-base' || selected.type === 'motorcycle-base' || selected.type === 'firetruck') &&
+      (type === 'road-straight' || type === 'road-curve')) return atSelected();
+  if ((type === 'car-base' || type === 'motorcycle-base' || type === 'firetruck') &&
+      (selected.type === 'road-straight' || selected.type === 'road-curve')) return atSelected();
+
+  if (selected.type === 'train-engine' && (type === 'rail-straight' || type === 'rail-curve')) return atSelected();
+  if (type === 'train-engine' && (selected.type === 'rail-straight' || selected.type === 'rail-curve')) return atSelected();
+
+  if (selected.type === 'airplane' && type === 'runway') return atSelected();
+  if (type === 'airplane' && selected.type === 'runway') return atSelected();
+
+  if (selected.type === 'helicopter' && type === 'helipad') return atSelected();
+  if (type === 'helicopter' && selected.type === 'helipad') return atSelected();
+
+  if (selected.type === 'boat' && (type === 'sea-tile' || type === 'water-tile')) return atSelected();
+  if (type === 'boat' && (selected.type === 'sea-tile' || selected.type === 'water-tile')) return atSelected();
+
+  void pair;
+  return null;
+}
+
 function addModule(type: ModuleType) {
   if (mode !== 'build') { showToast('⏹ Dừng mô phỏng trước khi thay linh kiện'); return; }
   const id = `${type}-${crypto.randomUUID().slice(0, 8)}`;
   const instance: ModuleInstance = {
     id,
     type,
-    position: findFreePosition(type),
+    position: contextualSpawnPosition(type) ?? findFreePosition(type),
     rotationY: 0,
     switchOn: (type === 'switch' || type === 'valve') ? true : type === 'door' ? false : undefined,
   };
@@ -262,6 +292,33 @@ function renderInspector(id: string | null) {
   const disabled = mode === 'run' ? 'disabled' : '';
   const isToggle = m.type === 'switch' || m.type === 'valve' || m.type === 'door';
   const canElevate = d.category === 'building' || d.category === 'nature' || d.category === 'transport' || d.category === 'structure';
+  const state = simulator.evaluate();
+  let runtimeStatus = '';
+  if (d.behavior.kind === 'vehicle') {
+    const rpm = state.rpm.get(id);
+    const routeKind = routeKindForVehicle(m.type);
+    const route = routeKind ? buildVehicleRoute(graph, id) : [];
+    const infrastructure =
+      routeKind === 'road' ? 'đường' :
+      routeKind === 'rail' ? 'đường ray' :
+      routeKind === 'runway' ? 'đường băng' :
+      m.type === 'boat' ? 'mặt nước' :
+      m.type === 'helicopter' ? 'bãi đáp' : 'khu vực phù hợp';
+    runtimeStatus = rpm
+      ? (routeKind && route.length < 2
+          ? '⚠️ Có truyền động nhưng chưa ở gần ' + infrastructure + '.'
+          : '✅ Đã nhận truyền động ' + Math.round(Math.abs(rpm)) + ' rpm.')
+      : '○ Chưa nhận mô-men từ mô tơ/hộp số.';
+  } else if (d.behavior.kind === 'motor') {
+    runtimeStatus = state.powered.has(id) ? '✅ Mô tơ đang được cấp điện.' : '○ Mô tơ chưa có điện.';
+  } else if (d.behavior.kind === 'pump') {
+    runtimeStatus = state.rpm.has(id) && state.fluid.has(id)
+      ? '✅ Bơm có cả mô-men và nguồn nước.'
+      : state.rpm.has(id)
+        ? '⚠️ Bơm đang quay nhưng chưa có nước đầu hút.'
+        : '○ Bơm chưa nhận truyền động.';
+  }
+
 
   const ports = d.ports.map(p => {
     const edge = [...graph.connections.values()].find(c =>
@@ -298,6 +355,7 @@ function renderInspector(id: string | null) {
   el.innerHTML =
     '<div class="inspect-title"><span>' + d.icon + '</span><div><b>' + d.name + '</b><small>' + d.description + '</small></div><button id="closeInspector" class="inspect-close" title="Đóng">×</button></div>' +
     switchHint +
+    (runtimeStatus ? '<div class="runtime-status">' + runtimeStatus + '</div>' : '') +
     '<div class="inspect-actions primary-actions">' +
       '<button id="rotatePart" ' + disabled + '>↻ Xoay</button>' +
       '<button id="focusPart">◎ Nhìn gần</button>' +
@@ -383,7 +441,21 @@ function evaluateRun() {
   const state = simulator.evaluate();
   workbench.setSimulation(true, state.rpm, state.active, state.fluid);
   sound.update(graph.modules.values(), state, true);
-  const mission = MISSIONS[missionIndex], feedback = updateMissionHint(state);
+  const mission = MISSIONS[missionIndex];
+  let feedback = updateMissionHint(state);
+
+  if (feedback.status !== 'complete') {
+    for (const module of graph.modules.values()) {
+      if (!state.rpm.has(module.id) || MODULES[module.type].behavior.kind !== 'vehicle') continue;
+      const kind = routeKindForVehicle(module.type);
+      if (kind && buildVehicleRoute(graph, module.id).length < 2) {
+        const need = kind === 'road' ? 'đường ở ngay gần xe' : kind === 'rail' ? 'đường ray ở ngay gần đầu tàu' : 'đường băng ở ngay gần máy bay';
+        feedback = { status: 'inactive', message: '⚠️ ' + MODULES[module.type].name + ' đã có truyền động nhưng cần ' + need + ' để di chuyển.' };
+        coach.textContent = feedback.message;
+        break;
+      }
+    }
+  }
   if (feedback.status === 'complete') {
     if (completedMissionId !== mission.id) { showToast('⭐ Nhiệm vụ hoàn thành!'); speak(mission.success); }
     completedMissionId = mission.id;
