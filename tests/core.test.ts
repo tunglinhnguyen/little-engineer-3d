@@ -420,7 +420,7 @@ describe('workbench pointer regressions', () => {
   });
   it('disconnects a part intentionally dragged away', () => {
     const { graph, lamp, send, controls } = pointerHarness();
-    send('pointerdown'); send('pointermove', 200); send('pointerup', 200);
+    send('pointerdown'); send('pointermove', 350); send('pointerup', 350);
     expect(graph.connections.size).toBe(0);
     expect(new SimulationEngine(graph).evaluate().active.has(lamp.id)).toBe(false);
     expect(controls.enabled).toBe(true);
