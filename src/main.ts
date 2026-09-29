@@ -465,8 +465,23 @@ function renderInspector(id: string | null) {
     const direction = p.direction === 'out' ? 'ra' : p.direction === 'in' ? 'vào' : 'ghép';
     return '<li class="' + (other ? 'connected' : 'disconnected') + '">' +
       (other ? '✓ ' : '○ ') + signalName + ' ' + direction +
-      (other ? ': ' + MODULES[other.type].name : '') + '</li>';
+      (other ? ': ' + moduleName(other) : '') + '</li>';
   }).join('');
+
+  const metrics: string[] = [];
+  if (state.voltage.has(id)) metrics.push('⚡ ' + state.voltage.get(id)!.toFixed(1) + ' V');
+  if (state.current.has(id)) metrics.push('🔌 ' + state.current.get(id)!.toFixed(2) + ' A');
+  if (state.rpm.has(id)) metrics.push('↻ ' + Math.round(Math.abs(state.rpm.get(id)!)) + ' rpm');
+  if (state.torque.has(id)) metrics.push('🔧 ' + state.torque.get(id)!.toFixed(2) + ' N·m');
+  if (state.flow.has(id)) metrics.push('💧 ' + state.flow.get(id)!.toFixed(1) + ' L/min');
+  if (state.pressure.has(id)) metrics.push('◉ ' + state.pressure.get(id)!.toFixed(2) + ' bar');
+  const faults = state.faults.get(id) ?? [];
+  const metricsHtml = engineerMode && metrics.length
+    ? '<div class="engineering-metrics">' + metrics.map(x => '<span>' + x + '</span>').join('') + '</div>'
+    : '';
+  const faultHtml = faults.length
+    ? '<div class="fault-list">' + faults.map(x => '<span>⚠️ ' + x + '</span>').join('') + '</div>'
+    : '';
 
   const switchHint = isToggle
     ? '<div class="switch-hint">👆 Chạm 2 lần để ' +
@@ -486,9 +501,10 @@ function renderInspector(id: string | null) {
 
   el.classList.add('compact');
   el.innerHTML =
-    '<div class="inspect-title"><span>' + d.icon + '</span><div><b>' + d.name + '</b><small>' + d.description + '</small></div><button id="closeInspector" class="inspect-close" title="Đóng">×</button></div>' +
+    '<div class="inspect-title"><span>' + d.icon + '</span><div><b>' + moduleName(m) + '</b><small>' + d.description + '</small></div><button id="closeInspector" class="inspect-close" title="Đóng">×</button></div>' +
     switchHint +
     (runtimeStatus ? '<div class="runtime-status">' + runtimeStatus + '</div>' : '') +
+    metricsHtml + faultHtml +
     '<div class="inspect-actions primary-actions">' +
       '<button id="rotatePart" ' + disabled + '>↻ Xoay</button>' +
       '<button id="focusPart">◎ Nhìn gần</button>' +
