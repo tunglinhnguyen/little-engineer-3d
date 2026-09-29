@@ -18,6 +18,7 @@ export class Workbench {
   readonly renderer: THREE.WebGLRenderer;
   readonly controls: OrbitControls;
   readonly root = new THREE.Group();
+  readonly connectionLayer = new THREE.Group();
   readonly graph: ConnectionGraph;
   selectedId: string | null = null;
   private objects = new Map<string, THREE.Group>();
@@ -55,6 +56,7 @@ export class Workbench {
     this.camera.far = 180;
     this.camera.updateProjectionMatrix();
     this.scene.add(this.root);
+    this.scene.add(this.connectionLayer);
     this.scene.add(this.routeGuide);
     this.camera.position.set(14, 13, 17);
     this.controls = new OrbitControls(this.camera, canvas);
@@ -131,6 +133,7 @@ export class Workbench {
     this.root.add(o);
     this.objects.set(instance.id, o);
     this.select(instance.id);
+    this.refreshConnectionVisuals();
     this.hooks.onGraphChanged();
   }
 
@@ -138,15 +141,16 @@ export class Workbench {
     this.finishDrag(true);
     for (const o of this.objects.values()) this.root.remove(o); this.objects.clear();
     for (const m of this.graph.modules.values()) { const o = createModuleObject(m); this.root.add(o); this.objects.set(m.id, o); }
+    this.refreshConnectionVisuals();
     this.select(null);
   }
 
-  removeSelected() { if (!this.selectedId || !this.hooks.canEdit()) return; this.finishDrag(true); this.graph.removeModule(this.selectedId); const o = this.objects.get(this.selectedId); if (o) this.root.remove(o); this.objects.delete(this.selectedId); this.select(null); this.hooks.onGraphChanged(); }
+  removeSelected() { if (!this.selectedId || !this.hooks.canEdit()) return; this.finishDrag(true); this.graph.removeModule(this.selectedId); const o = this.objects.get(this.selectedId); if (o) this.root.remove(o); this.objects.delete(this.selectedId); this.refreshConnectionVisuals(); this.select(null); this.hooks.onGraphChanged(); }
 
   rotateSelected() {
     if (!this.selectedId || !this.hooks.canEdit()) return; const m = this.graph.modules.get(this.selectedId), o = this.objects.get(this.selectedId); if (!m || !o) return;
     this.finishDrag(true); this.graph.disconnectModule(m.id); m.rotationY = (m.rotationY + Math.PI / 2) % (Math.PI * 2); o.rotation.y = m.rotationY;
-    this.graph.snapModule(m.id); o.position.set(...m.position); this.refreshPorts(); this.hooks.onGraphChanged();
+    this.graph.snapModule(m.id); o.position.set(...m.position); this.refreshConnectionVisuals(); this.refreshPorts(); this.hooks.onGraphChanged();
   }
 
   elevateSelected(delta: number) {
@@ -158,6 +162,7 @@ export class Workbench {
     const nextY = Math.max(.15, Math.min(5.15, Math.round((m.position[1] + delta) * 4) / 4));
     m.position = [m.position[0], nextY, m.position[2]];
     o.position.set(...m.position);
+    this.refreshConnectionVisuals();
     this.refreshPorts();
     this.hooks.onGraphChanged();
   }
@@ -182,6 +187,7 @@ export class Workbench {
     this.rpm = rpm;
     this.active = active;
     this.fluid = fluid;
+    this.connectionLayer.visible = !running;
     if (!running) this.vehicleTravel.clear();
   }
 
@@ -252,6 +258,75 @@ export class Workbench {
       });
     }
     this.hooks.onSelect(id);
+  }
+
+  private refreshConnectionVisuals() {
+    while (this.connectionLayer.children.length) {
+      const child = this.connectionLayer.children[0];
+      this.connectionLayer.remove(child);
+      child.traverse(o => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const material = mesh.material;
+        if (material instanceof THREE.Material) material.dispose();
+      });
+    }
+
+    const axisY = new THREE.Vector3(0, 1, 0);
+    const worldPort = (module: ModuleInstance, portId: string) => {
+      const port = MODULES[module.type].ports.find(p => p.id === portId);
+      if (!port) return null;
+      const position = new THREE.Vector3(...port.position)
+        .applyAxisAngle(axisY, module.rotationY)
+        .add(new THREE.Vector3(...module.position));
+      const axis = new THREE.Vector3(...port.axis).applyAxisAngle(axisY, module.rotationY).normalize();
+      return { position, axis };
+    };
+
+    for (const connection of this.graph.connections.values()) {
+      const from = this.graph.modules.get(connection.fromModuleId);
+      const to = this.graph.modules.get(connection.toModuleId);
+      if (!from || !to) continue;
+      const a = worldPort(from, connection.fromPortId);
+      const b = worldPort(to, connection.toPortId);
+      if (!a || !b) continue;
+
+      const delta = b.position.clone().sub(a.position);
+      const distance = delta.length();
+      const direction = distance > .025 ? delta.normalize() : a.axis.clone();
+      const length = Math.max(.13, distance + .06);
+      const center = a.position.clone().add(b.position).multiplyScalar(.5);
+
+      const color =
+        connection.signal === 'power' ? 0xc9554f :
+        connection.signal === 'rotation' ? 0xd7a833 :
+        connection.signal === 'fluid' ? 0x269ecf : 0x75838b;
+      const radius =
+        connection.signal === 'structural' ? .07 :
+        connection.signal === 'rotation' ? .065 :
+        connection.signal === 'fluid' ? .07 : .055;
+
+      const material = new THREE.MeshStandardMaterial({
+        color,
+        roughness: connection.signal === 'power' ? .5 : .28,
+        metalness: connection.signal === 'rotation' || connection.signal === 'structural' ? .48 : .16,
+      });
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 14), material);
+      sleeve.position.copy(center);
+      sleeve.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+      sleeve.castShadow = true;
+      this.connectionLayer.add(sleeve);
+
+      const collarMaterial = material.clone();
+      collarMaterial.color.offsetHSL(0, 0, .12);
+      for (const sign of [-1, 1]) {
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.35, radius * 1.35, .035, 14), collarMaterial.clone());
+        collar.position.copy(center).addScaledVector(direction, sign * length * .38);
+        collar.quaternion.copy(sleeve.quaternion);
+        collar.castShadow = true;
+        this.connectionLayer.add(collar);
+      }
+    }
   }
 
   private refreshRouteGuide() {
@@ -328,7 +403,7 @@ export class Workbench {
       this.updatePointer(e); const point = new THREE.Vector3(); if (!this.ray.ray.intersectPlane(this.dragPlane, point)) return;
       if (!this.dragging) {
         this.dragConnections = [...this.graph.incoming(this.dragModuleId), ...this.graph.outgoing(this.dragModuleId)];
-        this.graph.disconnectModule(this.dragModuleId); this.dragging = true; this.refreshPorts();
+        this.graph.disconnectModule(this.dragModuleId); this.dragging = true; this.refreshConnectionVisuals(); this.refreshPorts();
       }
       const o = this.objects.get(this.dragModuleId)!;
       point.add(this.dragOffset);
@@ -383,7 +458,7 @@ export class Workbench {
       } else this.graph.snapModule(m.id);
       o.position.set(...m.position);
     }
-    this.dragConnections = []; this.refreshPorts();
+    this.dragConnections = []; this.refreshConnectionVisuals(); this.refreshPorts();
     if (this.canvas.hasPointerCapture(pointerId)) this.canvas.releasePointerCapture(pointerId);
     if (changed && m) this.hooks.onGraphChanged();
   }
