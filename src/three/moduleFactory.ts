@@ -585,17 +585,27 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
         dash.position.set(0, -.48, z); g.add(dash);
       }
     } else {
-      const road = mesh(new THREE.RingGeometry(.58, 1.28, 36, 1, 0, Math.PI / 2), std(0x4f5559));
+      const centerRadius = .925;
+      const roadHalfWidth = .775;
+      const road = mesh(
+        new THREE.RingGeometry(centerRadius - roadHalfWidth, centerRadius + roadHalfWidth, 48, 1, 0, Math.PI / 2),
+        std(0x4f5559),
+      );
       road.rotation.x = -Math.PI / 2;
       road.position.y = -.5;
       g.add(road);
-      for (let i = 1; i <= 5; i++) {
-        const a = i / 6 * Math.PI / 2;
-        const dash = mesh(new THREE.BoxGeometry(.07, .025, .24), std(0xf6d86d));
-        const r = .93;
-        dash.position.set(Math.cos(a) * r, -.47, -Math.sin(a) * r);
+      for (let i = 1; i <= 7; i++) {
+        const a = i / 8 * Math.PI / 2;
+        const dash = mesh(new THREE.BoxGeometry(.07, .025, .22), std(0xf6d86d));
+        dash.position.set(Math.cos(a) * centerRadius, -.47, -Math.sin(a) * centerRadius);
         dash.rotation.y = -a;
         g.add(dash);
+      }
+      for (const radius of [centerRadius - roadHalfWidth, centerRadius + roadHalfWidth]) {
+        const edge = mesh(new THREE.TorusGeometry(Math.max(.03, radius), .025, 5, 48, Math.PI / 2), std(0xe8ecee));
+        edge.rotation.x = Math.PI / 2;
+        edge.position.y = -.465;
+        g.add(edge);
       }
     }
   }
@@ -670,15 +680,20 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
 
   if (instance.type === 'rail-curve') {
     g.remove(body);
-    for (const r of [.72, 1.05]) {
-      const rail = mesh(new THREE.TorusGeometry(r, .045, 8, 36, Math.PI / 2), std(0x79848a, .55));
-      rail.rotation.x = Math.PI / 2; rail.rotation.z = -Math.PI / 2; rail.position.set(-.1, -.43, .1); g.add(rail);
+    const centerRadius = 1.15;
+    const halfGauge = .42;
+    for (const radius of [centerRadius - halfGauge, centerRadius + halfGauge]) {
+      const rail = mesh(new THREE.TorusGeometry(radius, .045, 8, 48, Math.PI / 2), std(0x79848a, .55));
+      rail.rotation.x = Math.PI / 2;
+      rail.position.y = -.43;
+      g.add(rail);
     }
-    for (let i = 0; i <= 8; i++) {
-      const a = i / 8 * Math.PI / 2;
-      const sleeper = mesh(new THREE.BoxGeometry(.08, .07, .72), std(0x805b3c));
-      sleeper.position.set(Math.cos(a) * .88 - .1, -.55, Math.sin(a) * .88 + .1);
-      sleeper.rotation.y = -a; g.add(sleeper);
+    for (let i = 0; i <= 11; i++) {
+      const a = i / 11 * Math.PI / 2;
+      const sleeper = mesh(new THREE.BoxGeometry(1.12, .07, .09), std(0x805b3c));
+      sleeper.position.set(Math.cos(a) * centerRadius, -.55, -Math.sin(a) * centerRadius);
+      sleeper.rotation.y = a;
+      g.add(sleeper);
     }
   }
 
