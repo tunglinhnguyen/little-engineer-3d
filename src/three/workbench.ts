@@ -425,8 +425,8 @@ export class Workbench {
   toggleSwitch() {
     if (!this.selectedId) return;
     const m = this.graph.modules.get(this.selectedId);
-    if (!m || (m.type !== 'switch' && m.type !== 'valve' && m.type !== 'door')) return;
-    m.switchOn = m.type === 'door' ? m.switchOn !== true : !(m.switchOn !== false);
+    if (!m || (m.type !== 'switch' && m.type !== 'valve' && m.type !== 'door' && m.type !== 'rail-switch')) return;
+    m.switchOn = (m.type === 'door' || m.type === 'rail-switch') ? m.switchOn !== true : !(m.switchOn !== false);
     const old = this.objects.get(m.id);
     if (old) this.root.remove(old);
     const next = createModuleObject(m);
@@ -704,7 +704,7 @@ export class Workbench {
     if (!isDouble) return;
     this.lastTapId = null;
     const module = this.graph.modules.get(id);
-    if (module?.type === 'switch' || module?.type === 'valve' || module?.type === 'door') {
+    if (module?.type === 'switch' || module?.type === 'valve' || module?.type === 'door' || module?.type === 'rail-switch') {
       this.select(id);
       this.toggleSwitch();
     }
