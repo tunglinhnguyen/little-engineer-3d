@@ -6,6 +6,7 @@ import { SimulationEngine } from '../src/core/simulation';
 import { getMissionFeedback, MISSIONS } from '../src/core/missions';
 import { Workbench } from '../src/three/workbench';
 import { buildVehicleRoute, routeKindForVehicle } from '../src/core/worldRoutes';
+import { vehicleCanTravel, vehicleInfrastructureStatus } from '../src/core/vehicleRules';
 import type { Connection, ModuleInstance, ModuleType } from '../src/core/types';
 
 const module = (id: string, type: ModuleType, switchOn = true): ModuleInstance => ({ id, type, position: [0, 0, 0], rotationY: 0, switchOn });
@@ -239,6 +240,46 @@ describe('world route planner', () => {
     g.addModule(car);
     g.addModule(road);
     expect(buildVehicleRoute(g,car.id)).toHaveLength(0);
+  });
+});
+
+describe('vehicle infrastructure rules', () => {
+  it('keeps a driven car stationary when no road is nearby', () => {
+    const g = new ConnectionGraph();
+    const car = module('logic-car','car-base');
+    car.position = [0,.65,0];
+    g.addModule(car);
+    const rpm = new Map([[car.id, 60]]);
+    expect(vehicleCanTravel(g,car.id,rpm).ready).toBe(false);
+    expect(vehicleInfrastructureStatus(g,car.id).kind).toBe('road');
+  });
+
+  it('accepts a nearby road but rejects a remote one', () => {
+    const g = new ConnectionGraph();
+    const car = module('logic-car2','car-base');
+    const road = module('logic-road','road-straight');
+    car.position = [0,.65,0];
+    road.position = [2,.65,0];
+    g.addModule(car); g.addModule(road);
+    expect(vehicleInfrastructureStatus(g,car.id).ready).toBe(true);
+    road.position = [15,.65,15];
+    expect(vehicleInfrastructureStatus(g,car.id).ready).toBe(false);
+  });
+
+  it('requires water for a boat and helipad for a helicopter', () => {
+    const g = new ConnectionGraph();
+    const boat = module('logic-boat','boat');
+    const heli = module('logic-heli','helicopter');
+    boat.position = [0,.65,0];
+    heli.position = [8,.65,0];
+    g.addModule(boat); g.addModule(heli);
+    expect(vehicleInfrastructureStatus(g,boat.id).ready).toBe(false);
+    expect(vehicleInfrastructureStatus(g,heli.id).ready).toBe(false);
+    const sea = module('logic-sea','sea-tile'); sea.position = [1,.65,0];
+    const pad = module('logic-pad','helipad'); pad.position = [8,.65,1];
+    g.addModule(sea); g.addModule(pad);
+    expect(vehicleInfrastructureStatus(g,boat.id).ready).toBe(true);
+    expect(vehicleInfrastructureStatus(g,heli.id).ready).toBe(true);
   });
 });
 
