@@ -90,17 +90,57 @@ function labelSprite(text: string) {
 
 function addPortVisual(group: THREE.Group, p: PortDefinition) {
   const color =
-    p.signal === 'power' ? (p.direction === 'out' ? 0xff5252 : 0x4da6ff) :
-    p.signal === 'rotation' ? 0xffcc43 :
-    p.signal === 'fluid' ? 0x22b9f2 : 0xa6b2bd;
-  const ring = mesh(new THREE.TorusGeometry(.13, .04, 8, 20), new THREE.MeshBasicMaterial({ color }));
-  ring.position.set(...p.position);
+    p.signal === 'power' ? (p.direction === 'out' ? 0xf0564f : 0x4f9ee8) :
+    p.signal === 'rotation' ? 0xe7b83f :
+    p.signal === 'fluid' ? 0x27aee5 : 0x8a969e;
+
+  const root = new THREE.Group();
+  root.position.set(...p.position);
   const axis = new THREE.Vector3(...p.axis).normalize();
-  ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
-  ring.userData.isPortVisual = true;
-  ring.userData.portId = p.id;
-  ring.userData.portColor = color;
-  group.add(ring);
+  root.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+  root.userData.isPortVisual = true;
+  root.userData.portId = p.id;
+  root.userData.portColor = color;
+
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: .32,
+    metalness: p.signal === 'rotation' || p.signal === 'structural' ? .46 : .18,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+  });
+
+  if (p.signal === 'power') {
+    const collar = mesh(new THREE.CylinderGeometry(.14, .14, .12, 18), material);
+    collar.rotation.x = Math.PI / 2;
+    collar.position.z = p.direction === 'out' ? .055 : -.055;
+    root.add(collar);
+    const face = mesh(new THREE.TorusGeometry(.09, .025, 8, 18), material);
+    root.add(face);
+  } else if (p.signal === 'rotation') {
+    const shaft = mesh(new THREE.CylinderGeometry(.095, .095, .2, 12), material);
+    shaft.rotation.x = Math.PI / 2;
+    shaft.position.z = p.direction === 'out' ? .08 : -.08;
+    root.add(shaft);
+    const collar = mesh(new THREE.CylinderGeometry(.15, .15, .07, 16), material);
+    collar.rotation.x = Math.PI / 2;
+    root.add(collar);
+  } else if (p.signal === 'fluid') {
+    const flange = mesh(new THREE.CylinderGeometry(.16, .16, .08, 18), material);
+    flange.rotation.x = Math.PI / 2;
+    root.add(flange);
+    const tube = mesh(new THREE.CylinderGeometry(.095, .095, .22, 18), material);
+    tube.rotation.x = Math.PI / 2;
+    tube.position.z = p.direction === 'out' ? .08 : -.08;
+    root.add(tube);
+  } else {
+    const stud = mesh(new THREE.CylinderGeometry(.11, .11, .12, 12), material);
+    stud.rotation.x = Math.PI / 2;
+    root.add(stud);
+  }
+
+  root.visible = false;
+  group.add(root);
 }
 
 export function createModuleObject(instance: ModuleInstance): THREE.Group {
@@ -938,9 +978,10 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     }
   }
 
-  if (def.category === 'energy' || def.category === 'control' || def.category === 'motion' || def.category === 'output' || def.category === 'fluid') {
-    g.add(labelSprite(def.name));
-  }
+  const label = labelSprite(def.name);
+  label.visible = false;
+  label.userData.moduleLabel = true;
+  g.add(label);
   def.ports.forEach(p => addPortVisual(g, p));
   g.position.set(...instance.position);
   g.rotation.y = instance.rotationY;
@@ -957,10 +998,14 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
 export function setPortVisualsVisible(group: THREE.Group, visible: boolean, connectedPorts: Set<string> = new Set()) {
   group.traverse(o => {
     if (!o.userData.isPortVisual) return;
+    const connected = connectedPorts.has(o.userData.portId);
     o.visible = visible;
-    const material = (o as THREE.Mesh).material;
-    if (material instanceof THREE.MeshBasicMaterial) {
-      material.color.setHex(connectedPorts.has(o.userData.portId) ? 0x16834b : o.userData.portColor);
-    }
+    o.traverse(child => {
+      const material = (child as THREE.Mesh).material;
+      if (!(material instanceof THREE.MeshStandardMaterial)) return;
+      material.color.setHex(connected ? 0x2ca66f : o.userData.portColor);
+      material.emissive.setHex(connected ? 0x0b4e32 : 0x000000);
+      material.emissiveIntensity = connected ? .35 : 0;
+    });
   });
 }
