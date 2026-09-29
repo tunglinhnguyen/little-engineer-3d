@@ -246,7 +246,11 @@ export class ConnectionGraph {
         ...m,
         position: [Number(m.position[0]) || 0, Number(m.position[1]) || .65, Number(m.position[2]) || 0],
         rotationY: Number.isFinite(m.rotationY) ? m.rotationY : 0,
-        switchOn: (m.type === 'switch' || m.type === 'valve') ? m.switchOn !== false : m.switchOn,
+        switchOn: (m.type === 'switch' || m.type === 'valve')
+          ? m.switchOn !== false
+          : m.type === 'door'
+            ? m.switchOn === true
+            : m.switchOn,
       });
     }
 
@@ -255,7 +259,7 @@ export class ConnectionGraph {
       if (!from || !to || from.id === to.id) return;
       const fromPort = MODULES[from.type].ports.find(p => p.id === c.fromPortId);
       const toPort = MODULES[to.type].ports.find(p => p.id === c.toPortId);
-      if (!fromPort || !toPort || !portsCompatible(fromPort, toPort)) return;
+      if (!fromPort || !toPort || !modulePortsCompatible(from.type, fromPort, to.type, toPort)) return;
       const normalized = normalizeConnection(from, fromPort, to, toPort);
       if (!normalized || normalized.signal !== c.signal) return;
       if (this.isPortUsed(normalized.fromModuleId, normalized.fromPortId) || this.isPortUsed(normalized.toModuleId, normalized.toPortId)) return;
