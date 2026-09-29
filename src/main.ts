@@ -3,15 +3,16 @@ import { ConnectionGraph } from './core/connectionGraph';
 import { MODULES, PALETTE } from './core/moduleRegistry';
 import { SimulationEngine } from './core/simulation';
 import { getMissionFeedback, MISSIONS } from './core/missions';
-import type { ModuleInstance, ModuleType } from './core/types';
+import type { ModuleCategory, ModuleInstance, ModuleType } from './core/types';
 import { Workbench } from './three/workbench';
 import { setSpeechEnabled, speak } from './ui/speech';
+import { SoundEngine } from './ui/sound';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <canvas id="world"></canvas>
   <header class="topbar">
-    <div class="brand"><div class="brand-icon">⚙️</div><div><b>Little Engineer 3D</b><small>Phòng thí nghiệm STEAM · v0.2.1</small></div></div>
+    <div class="brand"><div class="brand-icon">⚙️</div><div><b>Little Engineer 3D</b><small>Phòng thí nghiệm STEAM · v0.3.0</small></div></div>
     <div class="toolbar">
       <button id="buildBtn" class="active">🔧 Lắp ráp</button><button id="runBtn">▶ Chạy</button>
       <button id="saveBtn" class="icon-btn" title="Lưu">💾</button><button id="resetBtn" class="icon-btn" title="Làm lại">↺</button>
@@ -26,13 +27,14 @@ app.innerHTML = `
     <div class="empty">Chạm một mô-đun để xem thông tin.</div>
   </aside>
   <nav class="camera-bar panel"><button data-camera="iso" class="active">◩ Chéo</button><button data-camera="top">▦ Trên</button><button data-camera="front">▤ Trước</button></nav>
-  <section class="palette panel"><div class="palette-title"><b>Kho mô-đun</b><span>Chạm để lấy linh kiện</span></div><div class="parts" id="parts"></div></section>
+  <section class="palette panel"><div class="palette-title"><b>Kho mô-đun</b><span>29 mô-đun · chọn theo nhóm</span></div><div class="category-tabs" id="categoryTabs"></div><div class="parts" id="parts"></div></section>
   <div class="coach" id="coach">Chọn một mô-đun ở kho phía dưới để bắt đầu.</div>
   <div class="toast hidden" id="toast"></div>
 `;
 
 const graph = new ConnectionGraph();
 const simulator = new SimulationEngine(graph);
+const sound = new SoundEngine();
 let mode: 'build' | 'run' = 'build', missionIndex = Number(localStorage.getItem('le3d-mission') ?? 0) % MISSIONS.length;
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const coach = document.querySelector<HTMLDivElement>('#coach')!;
@@ -86,7 +88,7 @@ function addModule(type: ModuleType) {
     type,
     position: findFreePosition(type),
     rotationY: 0,
-    switchOn: type === 'switch' ? true : undefined,
+    switchOn: (type === 'switch' || type === 'valve') ? true : undefined,
   };
   workbench.addInstance(instance);
   showToast(`➕ Đã đặt ${MODULES[type].name} vào chỗ trống`);
@@ -94,7 +96,43 @@ function addModule(type: ModuleType) {
 }
 
 const parts = document.querySelector<HTMLDivElement>('#parts')!;
-for (const type of PALETTE) { const d = MODULES[type], b = document.createElement('button'); b.className = `part ${d.category}`; b.innerHTML = `<span>${d.icon}</span><b>${d.name}</b><small>${d.category}</small>`; b.onclick = () => addModule(type); parts.appendChild(b); }
+const categoryTabs = document.querySelector<HTMLDivElement>('#categoryTabs')!;
+const CATEGORY_META: Record<ModuleCategory | 'all', { label: string; icon: string }> = {
+  all: { label: 'Tất cả', icon: '🧰' },
+  energy: { label: 'Nguồn', icon: '⚡' },
+  control: { label: 'Điều khiển', icon: '🎛️' },
+  motion: { label: 'Truyền động', icon: '⚙️' },
+  output: { label: 'Cơ cấu', icon: '🛠️' },
+  fluid: { label: 'Nước', icon: '💧' },
+  structure: { label: 'Khung', icon: '🧱' },
+};
+let activeCategory: ModuleCategory | 'all' = 'all';
+
+function renderPalette() {
+  parts.innerHTML = '';
+  for (const type of PALETTE) {
+    const d = MODULES[type];
+    if (activeCategory !== 'all' && d.category !== activeCategory) continue;
+    const b = document.createElement('button');
+    b.className = 'part ' + d.category;
+    b.innerHTML = '<span>' + d.icon + '</span><b>' + d.name + '</b><small>' + CATEGORY_META[d.category].label + '</small>';
+    b.onclick = () => addModule(type);
+    parts.appendChild(b);
+  }
+}
+for (const category of ['all', 'energy', 'control', 'motion', 'output', 'fluid', 'structure'] as const) {
+  const b = document.createElement('button');
+  b.className = 'category-tab' + (category === 'all' ? ' active' : '');
+  b.textContent = CATEGORY_META[category].icon + ' ' + CATEGORY_META[category].label;
+  b.onclick = () => {
+    activeCategory = category;
+    categoryTabs.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    renderPalette();
+  };
+  categoryTabs.appendChild(b);
+}
+renderPalette();
 const palette = document.querySelector<HTMLElement>('.palette')!;
 const positionCoach = () => document.documentElement.style.setProperty('--palette-clearance', `${innerHeight - palette.getBoundingClientRect().top + 12}px`);
 new ResizeObserver(positionCoach).observe(palette);
@@ -107,14 +145,31 @@ function renderInspector(id: string | null) {
   const ports = d.ports.map(p => {
     const edge = [...graph.connections.values()].find(c => (c.fromModuleId === id && c.fromPortId === p.id) || (c.toModuleId === id && c.toPortId === p.id));
     const other = edge ? graph.modules.get(edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId) : undefined;
-    const name = `${p.signal === 'power' ? 'Điện' : 'Truyền động'} ${p.direction === 'out' ? 'ra' : 'vào'}`;
+    const signalName = p.signal === 'power' ? 'Điện' : p.signal === 'rotation' ? 'Truyền động' : p.signal === 'fluid' ? 'Nước' : 'Kết cấu';
+    const name = signalName + ' ' + (p.direction === 'out' ? 'ra' : p.direction === 'in' ? 'vào' : 'hai chiều');
     return `<li class="${other ? 'connected' : 'disconnected'}">${other ? '✓' : '○'} ${name}: ${other ? `đã nối ${MODULES[other.type].name}` : 'chưa nối'}</li>`;
   }).join('');
   const disabled = mode === 'run' ? 'disabled' : '';
-  const switchHint = m.type === 'switch' ? '<div class="switch-hint">👆 Chạm 2 lần trực tiếp vào công tắc để bật/tắt nhanh.</div>' : '';
-  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${m.type === 'switch' ? `<button id="toggleSwitch">${m.switchOn === false ? '🟢 Bật' : '🔴 Tắt'} công tắc</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
-  document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected(); document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => workbench.removeSelected();
-  const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch'); if (sw) sw.onclick = () => { workbench.toggleSwitch(); const current = graph.modules.get(id); if (current) { renderInspector(id); speak(current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch đã nối đúng, điện sẽ chạy.'); } };
+  const isToggle = m.type === 'switch' || m.type === 'valve';
+  const switchHint = isToggle ? '<div class="switch-hint">👆 Chạm 2 lần trực tiếp để ' + (m.type === 'valve' ? 'mở/đóng van.' : 'bật/tắt nhanh.') + '</div>' : '';
+  const toggleLabel = m.type === 'valve'
+    ? (m.switchOn === false ? '🟢 Mở van' : '🔴 Đóng van')
+    : (m.switchOn === false ? '🟢 Bật công tắc' : '🔴 Tắt công tắc');
+  el.innerHTML = `<div class="inspect-title"><span>${d.icon}</span><div><b>${d.name}</b><small>${d.description}</small></div></div><p class="science">🧠 ${d.science}</p>${switchHint}<ul class="port-status" aria-label="Trạng thái kết nối">${ports}</ul><div class="inspect-actions"><button id="rotatePart" ${disabled}>↻ Xoay 90°</button>${isToggle ? `<button id="toggleSwitch">${toggleLabel}</button>` : ''}<button id="deletePart" class="danger" ${disabled}>🗑 Xóa</button></div>`;
+  document.querySelector<HTMLButtonElement>('#rotatePart')!.onclick = () => workbench.rotateSelected();
+  document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => workbench.removeSelected();
+  const sw = document.querySelector<HTMLButtonElement>('#toggleSwitch');
+  if (sw) sw.onclick = () => {
+    workbench.toggleSwitch();
+    const current = graph.modules.get(id);
+    if (current) {
+      renderInspector(id);
+      const text = current.type === 'valve'
+        ? (current.switchOn === false ? 'Van đã đóng. Nước bị chặn.' : 'Van đã mở. Nước có thể đi qua.')
+        : (current.switchOn === false ? 'Công tắc đã tắt. Mạch điện bị ngắt.' : 'Công tắc đã bật. Nếu mạch nối đúng, điện sẽ chạy.');
+      speak(text);
+    }
+  };
 }
 
 function renderMission(speakIt = false) {
@@ -143,7 +198,9 @@ document.querySelector<HTMLButtonElement>('#nextMission')!.onclick = () => { mis
 renderMission(false);
 
 function evaluateRun() {
-  const state = simulator.evaluate(); workbench.setSimulation(true, state.rpm, state.active);
+  const state = simulator.evaluate();
+  workbench.setSimulation(true, state.rpm, state.active, state.fluid);
+  sound.update(graph.modules.values(), state, true);
   const mission = MISSIONS[missionIndex], feedback = updateMissionHint(state);
   if (feedback.status === 'complete') {
     if (completedMissionId !== mission.id) { showToast('⭐ Nhiệm vụ hoàn thành!'); speak(mission.success); }
@@ -156,25 +213,73 @@ function evaluateRun() {
 
 function setMode(next: 'build' | 'run') {
   workbench.cancelInteraction();
-  mode = next; buildBtn.classList.toggle('active', mode === 'build'); runBtn.classList.toggle('active', mode === 'run');
-  if (mode === 'run') { runBtn.textContent = '⏹ Dừng'; showToast('▶ Mô phỏng đang chạy'); evaluateRun(); }
-  else { runBtn.textContent = '▶ Chạy'; completedMissionId = null; workbench.setSimulation(false, new Map(), new Set()); updateMissionHint(); }
+  mode = next;
+  buildBtn.classList.toggle('active', mode === 'build');
+  runBtn.classList.toggle('active', mode === 'run');
+  if (mode === 'run') {
+    runBtn.textContent = '⏹ Dừng';
+    showToast('▶ Mô phỏng đang chạy');
+    const feedback = evaluateRun();
+    if (feedback.status !== 'complete') speak(feedback.message);
+  } else {
+    runBtn.textContent = '▶ Chạy';
+    completedMissionId = null;
+    workbench.setSimulation(false, new Map(), new Set(), new Set());
+    sound.stopAll();
+    updateMissionHint();
+  }
   renderInspector(workbench.selectedId);
 }
-buildBtn.onclick = () => setMode('build'); runBtn.onclick = () => setMode(mode === 'run' ? 'build' : 'run');
+buildBtn.onclick = () => setMode('build');
+runBtn.onclick = async () => {
+  if (mode !== 'run') await sound.unlock();
+  setMode(mode === 'run' ? 'build' : 'run');
+};
 
 document.querySelector<HTMLButtonElement>('#saveBtn')!.onclick = save;
 document.querySelector<HTMLButtonElement>('#resetBtn')!.onclick = () => { graph.restore({ modules: [], connections: [] }); workbench.rebuildFromGraph(); saveQuietly(); setMode('build'); coach.textContent = 'Phòng lab đã được làm sạch. Bắt đầu một máy mới nhé!'; showToast('↺ Đã làm sạch bàn lắp ráp'); };
 
 document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(b => b.onclick = () => { document.querySelectorAll('[data-camera]').forEach(x => x.classList.remove('active')); b.classList.add('active'); workbench.setCamera(b.dataset.camera as 'iso' | 'top' | 'front'); });
 
-const speechToggle = document.createElement('button'); speechToggle.className = 'speech-toggle'; speechToggle.textContent = '🔊'; speechToggle.title = 'Bật/tắt hướng dẫn bằng giọng nói'; let speechOn = true; speechToggle.onclick = () => { speechOn = !speechOn; setSpeechEnabled(speechOn); speechToggle.textContent = speechOn ? '🔊' : '🔇'; }; document.body.appendChild(speechToggle);
+const speechToggle = document.createElement('button');
+speechToggle.className = 'speech-toggle';
+speechToggle.textContent = '🗣️';
+speechToggle.title = 'Bật/tắt giọng hướng dẫn';
+let speechOn = localStorage.getItem('le3d-speech') !== '0';
+setSpeechEnabled(speechOn);
+speechToggle.classList.toggle('muted', !speechOn);
+speechToggle.onclick = () => {
+  speechOn = !speechOn;
+  setSpeechEnabled(speechOn);
+  localStorage.setItem('le3d-speech', speechOn ? '1' : '0');
+  speechToggle.classList.toggle('muted', !speechOn);
+  if (speechOn) speak('Đã bật giọng hướng dẫn.');
+};
+document.body.appendChild(speechToggle);
+
+const audioToggle = document.createElement('button');
+audioToggle.className = 'audio-toggle';
+let soundOn = localStorage.getItem('le3d-sound') !== '0';
+sound.setEnabled(soundOn);
+audioToggle.textContent = soundOn ? '🔉' : '🔇';
+audioToggle.title = 'Bật/tắt âm thanh máy';
+audioToggle.onclick = async () => {
+  soundOn = !soundOn;
+  sound.setEnabled(soundOn);
+  localStorage.setItem('le3d-sound', soundOn ? '1' : '0');
+  audioToggle.textContent = soundOn ? '🔉' : '🔇';
+  if (soundOn) {
+    await sound.unlock();
+    if (mode === 'run') evaluateRun();
+  }
+};
+document.body.appendChild(audioToggle);
 
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-2', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260929-3', {
         scope: './',
         updateViaCache: 'none',
       });
