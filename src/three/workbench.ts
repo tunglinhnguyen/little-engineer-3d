@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MODULES } from '../core/moduleRegistry';
-import { ConnectionGraph, portsCompatible } from '../core/connectionGraph';
+import { ConnectionGraph, modulePortsCompatible } from '../core/connectionGraph';
 import { buildVehicleRoute, routeKindForVehicle } from '../core/worldRoutes';
 import type { Connection, ModuleInstance } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
@@ -262,7 +262,7 @@ export class Workbench {
         selected &&
         m &&
         id !== selected.id &&
-        MODULES[m.type].ports.some(target => selectedPorts.some(source => portsCompatible(source, target)))
+        MODULES[m.type].ports.some(target => selectedPorts.some(source => modulePortsCompatible(selected.type, source, m.type, target)))
       );
       setPortVisualsVisible(object, id === this.selectedId || compatibleTarget, connected);
     }
