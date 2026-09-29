@@ -150,5 +150,6 @@ export interface Mission {
   requiredPath: ModuleType[];
   requiredPaths?: ModuleType[][];
   requiredModules?: ModuleType[];
+  buildOnly?: boolean;
   success: string;
 }
