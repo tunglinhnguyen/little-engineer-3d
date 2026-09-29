@@ -483,8 +483,18 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     g.userData.vehicle = true;
     const frame = mesh(new THREE.BoxGeometry(2.25, .32, 1.18), std(c, .18));
     frame.position.y = .12; frame.userData.vehicleBody = true; g.add(frame);
-    const cabin = mesh(new THREE.BoxGeometry(1.05, .55, 1.02), std(0xe9f2f6, .08));
-    cabin.position.set(.25, .52, 0); cabin.userData.vehicleBody = true; g.add(cabin);
+    const hood = mesh(new THREE.BoxGeometry(.82, .3, 1.05), std(c, .18));
+    hood.position.set(.82, .36, 0); hood.userData.vehicleBody = true; g.add(hood);
+    const cabin = mesh(new THREE.BoxGeometry(.96, .56, 1.0), std(c, .14));
+    cabin.position.set(-.05, .57, 0); cabin.userData.vehicleBody = true; g.add(cabin);
+    const windshield = mesh(new THREE.BoxGeometry(.08, .42, .86), new THREE.MeshStandardMaterial({ color: 0x8ed4e8, transparent: true, opacity: .58, roughness: .16 }));
+    windshield.position.set(.47, .62, 0); windshield.rotation.z = -.12; windshield.userData.vehicleBody = true; g.add(windshield);
+    const rearGlass = mesh(new THREE.BoxGeometry(.08, .38, .82), new THREE.MeshStandardMaterial({ color: 0x8ed4e8, transparent: true, opacity: .5, roughness: .16 }));
+    rearGlass.position.set(-.55, .62, 0); rearGlass.rotation.z = .12; rearGlass.userData.vehicleBody = true; g.add(rearGlass);
+    for (const z of [-.38, .38]) {
+      const lamp = mesh(new THREE.SphereGeometry(.09, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff3bc, emissive: 0xffdf74, emissiveIntensity: .45 }));
+      lamp.position.set(1.15, .32, z); g.add(lamp);
+    }
     for (const x of [-.75, .78]) for (const z of [-.69, .69]) {
       const wr = rotorZ(g);
       wr.position.set(x, -.05, z);
@@ -528,11 +538,18 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     base.position.y = .02; base.userData.vehicleBody = true; g.add(base);
     const cabin = mesh(new THREE.BoxGeometry(instance.type === 'train-engine' ? 1.0 : 1.75, .82, .9), std(instance.type === 'train-engine' ? 0x367b55 : 0xe1b675, .1));
     cabin.position.set(instance.type === 'train-engine' ? .35 : 0, .58, 0); cabin.userData.vehicleBody = true; g.add(cabin);
+    const windowXs = instance.type === 'train-engine' ? [.22, .5] : [-.58, 0, .58];
+    for (const x of windowXs) for (const z of [-.47, .47]) {
+      const window = mesh(new THREE.BoxGeometry(.28, .28, .035), new THREE.MeshStandardMaterial({ color: 0x8fd4eb, transparent: true, opacity: .62, roughness: .14 }));
+      window.position.set(x, .66, z); g.add(window);
+    }
     if (instance.type === 'train-engine') {
       const nose = mesh(new THREE.CylinderGeometry(.27, .34, .72, 20), std(0x293f4c, .3));
       nose.rotation.z = Math.PI / 2; nose.position.set(-.92, .48, 0); g.add(nose);
       const stack = mesh(new THREE.CylinderGeometry(.12, .17, .5, 16), std(0x26343c, .3));
       stack.position.set(-.65, 1.0, 0); g.add(stack);
+      const lamp = mesh(new THREE.SphereGeometry(.1, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff0ad, emissive: 0xffcf4f, emissiveIntensity: .55 }));
+      lamp.position.set(-1.25, .55, 0); g.add(lamp);
     }
     for (const x of [-.78, 0, .78]) for (const z of [-.54, .54]) {
       const wr = rotorZ(g);
@@ -552,10 +569,18 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
         dash.position.set(0, -.48, z); g.add(dash);
       }
     } else {
-      const a = mesh(new THREE.BoxGeometry(1.15, .1, 2.3), std(0x4f5559));
-      a.position.set(.58, -.55, 0); g.add(a);
-      const b = mesh(new THREE.BoxGeometry(2.3, .1, 1.15), std(0x4f5559));
-      b.position.set(0, -.55, -.58); g.add(b);
+      const road = mesh(new THREE.RingGeometry(.58, 1.28, 36, 1, 0, Math.PI / 2), std(0x4f5559));
+      road.rotation.x = -Math.PI / 2;
+      road.position.y = -.5;
+      g.add(road);
+      for (let i = 1; i <= 5; i++) {
+        const a = i / 6 * Math.PI / 2;
+        const dash = mesh(new THREE.BoxGeometry(.07, .025, .24), std(0xf6d86d));
+        const r = .93;
+        dash.position.set(Math.cos(a) * r, -.47, -Math.sin(a) * r);
+        dash.rotation.y = -a;
+        g.add(dash);
+      }
     }
   }
 
@@ -731,7 +756,7 @@ export function createModuleObject(instance: ModuleInstance): THREE.Group {
     }
     for (const x of [-.45, .65]) {
       const wr = rotorZ(g); wr.position.set(x, -.42, 0);
-      const tire = mesh(new THREE.TorusGeometry(.17, .05, 8, 16), std(0x252a2e)); tire.rotation.x = Math.PI / 2; wr.add(tire);
+      const tire = mesh(new THREE.TorusGeometry(.17, .05, 8, 16), std(0x252a2e)); wr.add(tire);
     }
   }
 
