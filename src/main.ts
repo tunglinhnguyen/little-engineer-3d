@@ -118,6 +118,9 @@ app.innerHTML = `
 const graph = new ConnectionGraph();
 const simulator = new SimulationEngine(graph);
 const sound = new SoundEngine();
+const projectStore = new ProjectStore();
+const progressStore = new ProgressStore();
+progressStore.startSession();
 let mode: 'build' | 'run' = 'build', missionIndex = Number(localStorage.getItem('le3d-mission') ?? 0) % MISSIONS.length;
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const coach = document.querySelector<HTMLDivElement>('#coach')!;
@@ -125,6 +128,10 @@ const toast = document.querySelector<HTMLDivElement>('#toast')!;
 const buildBtn = document.querySelector<HTMLButtonElement>('#buildBtn')!, runBtn = document.querySelector<HTMLButtonElement>('#runBtn')!;
 let toastTimer = 0;
 let completedMissionId: string | null = null;
+let sandboxMode = localStorage.getItem('le3d-sandbox') === '1';
+let engineerMode = localStorage.getItem('le3d-engineer-mode') === '1';
+let energyMode: 'off' | 'all' | 'power' | 'rotation' | 'fluid' = 'off';
+let activeTutorialId: string | null = localStorage.getItem('le3d-tutorial');
 
 function showToast(text: string) { toast.textContent = text; toast.classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.classList.add('hidden'), 2200); }
 function save() { localStorage.setItem('le3d-project', JSON.stringify(graph.serialize())); localStorage.setItem('le3d-mission', String(missionIndex)); showToast('💾 Đã lưu thế giới trên thiết bị'); }
