@@ -522,6 +522,29 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     size: [.75, .65, .75], ports: [], behavior: { kind: 'structure' },
   },
 
+  'custom-block': {
+    type: 'custom-block', name: 'Khối sáng tạo', icon: '🧩', category: 'structure',
+    description: 'Khối do bé tự đặt tên, màu và kích thước.', science: 'Một mô-đun kỹ thuật cần hình học và kiểu kết nối rõ ràng để lắp an toàn.',
+    size: [1.2, 1.0, 1.2],
+    ports: [...STRUCT_4, ...STRUCT_Y],
+    behavior: { kind: 'structure' },
+  },
+  'custom-power-block': {
+    type: 'custom-power-block', name: 'Khối điện tự tạo', icon: '⚡', category: 'control',
+    description: 'Khối tự tạo có cổng điện vào và ra.', science: 'Cổng điện quy định chiều truyền năng lượng qua mô-đun.',
+    size: [1.2, 1.0, 1.0], ports: [LR.powerIn, LR.powerOut], behavior: { kind: 'switch' },
+  },
+  'custom-rotation-block': {
+    type: 'custom-rotation-block', name: 'Khối truyền động tự tạo', icon: '⚙️', category: 'motion',
+    description: 'Khối tự tạo truyền chuyển động quay.', science: 'Trục vào và trục ra phải đồng trục để truyền mô-men hiệu quả.',
+    size: [1.2, 1.0, 1.0], ports: [LR.rotationIn, LR.rotationOut], behavior: { kind: 'pass-rotation' },
+  },
+  'custom-fluid-block': {
+    type: 'custom-fluid-block', name: 'Khối nước tự tạo', icon: '💧', category: 'fluid',
+    description: 'Khối tự tạo có cổng nước vào và ra.', science: 'Đường dẫn kín giúp chất lỏng đi qua mô-đun.',
+    size: [1.2, 1.0, 1.0], ports: [LR.fluidIn, LR.fluidOut], behavior: { kind: 'fluid-pass' },
+  },
+
   chassis: {
     type: 'chassis', name: 'Khung máy', icon: '▰', category: 'structure',
     description: 'Nền cơ khí để bố trí các bộ phận.', science: 'Kết cấu chịu tải và giữ hình học của máy.',
