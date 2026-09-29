@@ -184,6 +184,18 @@ describe('smart assembly rules', () => {
     expect(g.connections.size).toBe(0);
   });
 
+  it('uses a dedicated rail bridge and does not mix it with road pieces', () => {
+    const g = new ConnectionGraph();
+    const rail = module('rail-for-bridge','rail-straight');
+    const railBridge = module('rail-bridge-test','rail-bridge');
+    const road = module('road-for-bridge','road-straight');
+    [rail,railBridge,road].forEach(m=>g.addModule(m));
+    expect(g.attachModuleToTarget(railBridge.id,rail.id)).toBe(true);
+    const road2 = module('road-for-bridge-2','road-straight');
+    g.addModule(road2);
+    expect(g.attachModuleToTarget(road2.id,railBridge.id)).toBe(false);
+  });
+
   it('joins road to road and rail to rail but not road to rail', () => {
     const g = new ConnectionGraph();
     const roadA = module('road-a2','road-straight');
@@ -201,6 +213,19 @@ describe('world route planner', () => {
     expect(routeKindForVehicle('train-engine')).toBe('rail');
     expect(routeKindForVehicle('airplane')).toBe('runway');
     expect(routeKindForVehicle('boat')).toBe(null);
+  });
+
+  it('routes through a snapped road junction component', () => {
+    const g = new ConnectionGraph();
+    const car = module('junction-car','car-base');
+    const road = module('junction-road','road-straight');
+    const junction = module('junction-node','road-crossing');
+    car.position = [0,.65,-2];
+    road.position = [0,.65,0];
+    junction.position = [0,.65,2.7];
+    [car,road,junction].forEach(m=>g.addModule(m));
+    expect(g.snapModule(junction.id)).toBe(true);
+    expect(buildVehicleRoute(g,car.id).length).toBeGreaterThanOrEqual(3);
   });
 
   it('builds a continuous road route from snapped road pieces', () => {
