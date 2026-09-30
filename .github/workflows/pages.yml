@@ -25,19 +25,18 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run check
       - run: npm run build
-      - name: Install Chromium for visual QA
+      - name: Install Chromium for car QA
         run: npx playwright install --with-deps chromium
-      - name: Run 30-scenario visual QA
+      - name: Run focused car assembly QA
         run: npm run qa:e2e
-      - name: Upload 30-feature QA evidence
+      - name: Upload car assembly screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qa-30-screenshots
+          name: car-focus-screenshots
           path: |
-            test-results/qa
+            test-results/car
             playwright-report
-            docs/qa-30-feature-matrix.md
           if-no-files-found: warn
           retention-days: 30
       - name: Configure GitHub Pages
