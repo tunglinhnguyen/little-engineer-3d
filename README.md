@@ -1,26 +1,45 @@
-# ⚙️ Little Engineer 3D
+# 🚗 Little Engineer 3D — Car Lab
 
-**Little Engineer 3D** là phòng thí nghiệm STEAM 3D chạy trực tiếp trong trình duyệt. Trẻ chọn linh kiện, kéo để ráp vào nhau bằng các cổng có kiểu, rồi bấm **Chạy** để quan sát điện năng và chuyển động truyền qua hệ thống.
+Little Engineer 3D hiện được **thu gọn về một mục tiêu duy nhất**: trẻ ráp một ô tô điện từ các mô-đun chức năng, kiểm tra đúng chuỗi truyền năng lượng, rồi cho xe chạy trên đường thử 3D.
 
-> Mục tiêu của dự án là dạy quan hệ **nguyên nhân → kết quả** trong cơ khí, điện và robot bằng thao tác lắp ráp trực quan, không biến trải nghiệm thành phần mềm CAD phức tạp.
+## Phạm vi hiện tại
 
-## MVP hiện tại
+Bàn lắp chỉ đưa ra 6 mô-đun theo đúng thứ tự học:
 
-- Three.js 3D workbench tối ưu cho desktop và iPad/iPhone.
-- 12 mô-đun procedural: Pin, Công tắc, Mô tơ, Trục, 2 bánh răng, Bánh xe, Cánh quạt, Đầu khoan, Đèn, Cảm biến, Khung máy.
-- **Typed ports**: điện và chuyển động quay không thể nối nhầm loại.
-- Kéo/thả và tự **snap** khi hai cổng tương thích ở gần nhau.
-- Đồ thị kết nối độc lập với phần render 3D.
-- Simulation engine truyền:
-  - `power`: Pin → Công tắc → tải điện / Mô tơ.
-  - `rotation`: Mô tơ → Trục / Bánh răng → đầu ra.
-- Hoạt ảnh thời gian thực cho mô tơ, trục, bánh răng, quạt, bánh xe, đầu khoan và đèn.
-- 4 nhiệm vụ STEAM: mạch đèn, quạt mini, máy khoan, hộp số.
-- Hướng dẫn giọng nói tiếng Việt bằng Web Speech API.
-- Lưu tự động dự án bằng `localStorage`.
-- 3 góc camera cố định.
-- Unit tests cho connector rules và simulation graph.
-- GitHub Pages workflow.
+1. Pin
+2. Công tắc
+3. Mô tơ
+4. Hộp số
+5. Vi sai
+6. Khung xe + 4 bánh
+
+Đường thử được tạo sẵn và khóa vị trí. Trẻ không phải quản lý nhà cửa, tàu, nước, địa hình, blueprint, thành tích hay các công cụ phụ trước khi hiểu được chiếc ô tô hoạt động.
+
+## Chuỗi chức năng
+
+```text
+Pin → Công tắc → Mô tơ → Hộp số → Vi sai → Khung xe
+ điện                chuyển động quay
+```
+
+- Cổng điện chỉ nối với cổng điện.
+- Cổng quay chỉ nối với cổng quay.
+- Mô tơ chỉ quay khi Công tắc đóng.
+- Hộp số giảm tốc và tăng lực kéo.
+- Vi sai truyền mô-men tới cụm bánh.
+- Xe chỉ chạy khi chuỗi truyền động hoàn chỉnh và ở gần đường thử.
+
+## Tương tác đã tối giản
+
+Khi chọn một mô-đun, chỉ còn các thao tác cần thiết:
+
+- **Gắn**: tự tìm và snap vào khớp phù hợp gần nhất.
+- **Xoay**: xoay 90°.
+- **Tháo**: ngắt các khớp của riêng mô-đun đó.
+- **Xóa**: bỏ mô-đun khỏi xe.
+- Riêng **Công tắc** có nút **Bật/Tắt** trực tiếp.
+
+Các nút được thiết kế lớn, ít chữ và phù hợp thao tác cảm ứng trên iPad.
 
 ## Chạy local
 
@@ -29,44 +48,24 @@ npm install
 npm run dev
 ```
 
-Kiểm tra chất lượng:
+Kiểm tra:
 
 ```bash
 npm run check
 npm run build
+npm run qa:e2e
 ```
 
-## Kiến trúc
+CI chạy unit tests, build production và 5 browser acceptance tests; các ảnh chụp được lưu trong artifact `car-focus-screenshots`.
+
+## Kiến trúc đang dùng
 
 ```text
-UI / Missions
-   │
-   ├── Module Registry ── định nghĩa hình học logic, cổng, behavior
-   │
-   ├── Snap / Connection Graph ── ai nối với ai
-   │
-   ├── Simulation Engine ── truyền power / rotation
-   │
-   └── Three.js Workbench ── render, camera, pointer, animation
+Car UI
+  ├─ ConnectionGraph — typed ports + snap
+  ├─ SimulationEngine — power + RPM + torque
+  ├─ VehicleRules / WorldRoutes — điều kiện chạy + tuyến đường
+  └─ Three.js Workbench — render, drag, camera, animation
 ```
 
-Render 3D và simulation graph được tách rời. Vì vậy sau này có thể thêm Rapier cho trọng lực/va chạm/khớp mà không phải viết lại logic bài học.
-
-## Nguyên tắc module
-
-Mỗi module có:
-
-- `ports`: loại tín hiệu, hướng vào/ra, vị trí và trục snap.
-- `behavior`: source, switch, motor, gear, pass-through hoặc output.
-- `science`: câu giải thích ngắn để trẻ hiểu hiện tượng.
-- procedural Three.js model hoặc GLB model trong tương lai.
-
-Xem [docs/module-schema.md](docs/module-schema.md).
-
-## Roadmap
-
-Xem [ROADMAP.md](ROADMAP.md). Hướng phát triển chính: physics selective bằng Rapier, dây điện linh hoạt, 2 mô tơ + chassis thành xe robot, sensor/controller, Blockly và thư viện bài học theo độ tuổi.
-
-## License
-
-MIT. Các thương hiệu và bộ đồ chơi bên thứ ba không liên quan tới dự án này.
+Mục tiêu tiếp theo chỉ mở rộng khi trải nghiệm ráp và chạy ô tô đã ổn định trên iPad.
