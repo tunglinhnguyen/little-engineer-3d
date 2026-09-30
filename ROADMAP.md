@@ -1,32 +1,31 @@
-# Roadmap
+# Roadmap — Car Lab only
 
-## Phase 1 — Functional STEAM Builder ✅
-- Typed snap ports.
-- Power + rotation graph simulation.
-- Core module palette.
-- Missions, narration, save/load, responsive UI.
+## Current release — Make one car work
 
-## Phase 2 — Mechanical Playground
-- Rapier adapter for chassis, wheels, gravity and collision.
-- Revolute/prismatic joints.
-- Physical gear coupling where educationally useful.
-- Flexible wire rendering without making wires physics bodies.
-- Undo/redo and assembly groups.
+- [x] 6-module car palette only.
+- [x] Typed electrical and rotational connectors.
+- [x] Smart snap and auto alignment.
+- [x] Direct module actions: attach, rotate, detach, delete.
+- [x] Direct switch on/off control.
+- [x] Battery → switch → motor → gearbox → differential → car simulation.
+- [x] Fixed road test track.
+- [x] Car moves only when drivetrain and road conditions are valid.
+- [x] Undo/redo and clean reset.
+- [x] iPad-sized touch controls.
+- [x] Focused unit tests and browser screenshot QA.
 
-## Phase 3 — Robot Lab
-- Controller module.
-- Distance/light/touch sensors.
-- Two-motor differential drive.
-- Blockly programming: move, wait, if sensor, repeat.
-- Mission checker for behavior, not only topology.
+## Next optimization gate
 
-## Phase 4 — Curriculum
-- Age bands and teacher/parent view.
-- Lesson packs: electricity, energy, mechanisms, robotics.
-- Stars/badges based on concepts learned rather than grinding.
-- Vietnamese + English content packs.
+Do not add a new domain until these are verified on the target iPad:
 
-## Phase 5 — Authoring & AI
-- Module authoring tool: ports + behavior + GLB metadata.
-- AI-assisted procedural part generation with validation.
-- Automated mission generation constrained by available modules.
+- Drag/snap feels reliable with a finger.
+- All action buttons are reachable in landscape and portrait.
+- No accidental detach while tapping.
+- Car starts/stops immediately with the switch.
+- Camera remains easy to recover with “Toàn xe”.
+- Sustained animation is smooth for several minutes.
+- PWA refresh always loads the newest build.
+
+## After the car lab is stable
+
+Only then consider one extension at a time, starting with a second car lesson such as gear ratio or steering. No broad world-building feature set is part of the current scope.
