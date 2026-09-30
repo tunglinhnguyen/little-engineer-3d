@@ -16,6 +16,14 @@ const rotationOut: ModulePort = {
   id: 'rotation-out', signal: 'rotation', direction: 'out',
   position: [.72, 0, 0], axis: [1, 0, 0],
 };
+const structuralPort = (
+  id: string,
+  position: [number,number,number],
+  axis: [number,number,number],
+): ModulePort => ({
+  id, signal:'structural', direction:'bi', position, axis,
+});
+
 const roadPort = (
   id: string,
   position: [number,number,number],
@@ -58,14 +66,14 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   },
   'front-axle': {
     type:'front-axle', name:'Trục trước', icon:'━',
-    description:'Mang hai bánh trước và truyền chuyển động quay cho bánh.',
+    description:'Trục dẫn hướng mang hai bánh trước; không nhận mô-men từ động cơ.',
     size:[.5,.35,2.05],
     ports:[
-      {...rotationIn,id:'rotation-in'},
-      {...rotationOut,id:'wheel-left',position:[0,0,.95],axis:[0,0,1]},
-      {...rotationOut,id:'wheel-right',position:[0,0,-.95],axis:[0,0,-1]},
+      structuralPort('mount-in',[0,0,0],[-1,0,0]),
+      structuralPort('wheel-left',[0,0,.95],[0,0,1]),
+      structuralPort('wheel-right',[0,0,-.95],[0,0,-1]),
     ],
-    behavior:{kind:'pass-rotation',efficiency:.98},
+    behavior:{kind:'passive'},
   },
   'drive-axle': {
     type:'drive-axle', name:'Trục chủ động', icon:'━',
@@ -81,9 +89,12 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
   },
   wheel: {
     type:'wheel', name:'Bánh xe', icon:'⚫',
-    description:'Bánh rời; cần lắp đủ bốn bánh lên hai trục.',
+    description:'Bánh rời; bánh sau nhận mô-men, bánh trước quay tự do khi xe lăn.',
     size:[.42,.72,.72],
-    ports:[{...rotationIn,position:[0,0,0]}],
+    ports:[
+      {...rotationIn,position:[0,0,0]},
+      structuralPort('mount-in',[0,0,0],[-1,0,0]),
+    ],
     behavior:{kind:'wheel'},
   },
   'car-base': {
@@ -91,8 +102,8 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     description:'Khung xe trần, không bao gồm bánh hay trục.',
     size:[3.25,.40,1.72],
     ports:[
-      {...rotationIn,id:'vehicle-in',position:[-1.48,0,0]},
-      {...rotationOut,id:'front-out',position:[1.05,0,0]},
+      {...rotationIn,id:'drive-in',position:[-1.48,0,0]},
+      structuralPort('front-mount',[1.05,0,0],[1,0,0]),
     ],
     behavior:{kind:'vehicle',vehicleSpeed:1.0},
   },
