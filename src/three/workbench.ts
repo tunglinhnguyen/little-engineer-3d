@@ -785,6 +785,23 @@ export class Workbench {
         if (reverse) tangent.multiplyScalar(-1);
 
         const yaw = Math.atan2(-tangent.z, tangent.x);
+
+        // Estimate route curvature a short distance ahead so the front wheels
+        // visibly steer into a bend instead of remaining rigidly straight.
+        const lookAheadT = THREE.MathUtils.clamp(
+          t + (reverse ? -.035 : .035),
+          0,
+          1,
+        );
+        const ahead = curve.getTangentAt(lookAheadT).normalize();
+        if (reverse) ahead.multiplyScalar(-1);
+        const currentHeading = Math.atan2(-tangent.z, tangent.x);
+        const aheadHeading = Math.atan2(-ahead.z, ahead.x);
+        let headingDelta = aheadHeading - currentHeading;
+        while (headingDelta > Math.PI) headingDelta -= Math.PI * 2;
+        while (headingDelta < -Math.PI) headingDelta += Math.PI * 2;
+        const steerAngle = THREE.MathUtils.clamp(headingDelta * 2.2, -.42, .42);
+
         const assembly = this.vehicleAssembly(id);
         const base = new THREE.Vector3(...module.position);
         const deltaYaw = yaw - module.rotationY;
@@ -801,6 +818,13 @@ export class Workbench {
 
           object.position.copy(target).add(offset);
           object.rotation.y = model.rotationY + deltaYaw;
+
+          if (
+            model.type === 'wheel' &&
+            (model.slotKey === 'car:wheel-fl' || model.slotKey === 'car:wheel-fr')
+          ) {
+            object.rotation.y += steerAngle;
+          }
         }
 
         // All four wheels roll from vehicle ground speed. The rear pair is
