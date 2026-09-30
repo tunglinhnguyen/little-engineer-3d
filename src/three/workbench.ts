@@ -21,6 +21,7 @@ export interface WorkbenchHooks {
   getSnapPose?(id: string, position: Vector3Tuple): SnapPose | null;
   onDrop?(id: string, snapped: boolean): void;
   onHoldReady?(id: string): void;
+  onDoubleTap?(id: string): void;
 }
 
 export class Workbench {
@@ -52,8 +53,12 @@ export class Workbench {
   private holdTimer = 0;
   private snapActive = false;
   private snapLabel = '';
+  private lastTapAt = 0;
+  private lastTapId: string | null = null;
 
   private running = false;
+  private stopUntil = new Map<string, number>();
+  private stopLatch = new Set<string>();
   private rpm = new Map<string, number>();
   private vehicleProgress = new Map<string, number>();
   private last = performance.now();
@@ -195,6 +200,8 @@ export class Workbench {
 
     if (!running) {
       this.vehicleProgress.clear();
+      this.stopUntil.clear();
+      this.stopLatch.clear();
       for (const [id, object] of this.objects) {
         const module = this.graph.modules.get(id);
         if (!module) continue;
@@ -586,6 +593,18 @@ export class Workbench {
     const module = id ? this.graph.modules.get(id) : undefined;
     const object = id ? this.objects.get(id) : undefined;
 
+    if (!changed && !cancelled && id) {
+      const now = performance.now();
+      if (this.lastTapId === id && now - this.lastTapAt < 320) {
+        this.lastTapAt = 0;
+        this.lastTapId = null;
+        this.hooks.onDoubleTap?.(id);
+      } else {
+        this.lastTapAt = now;
+        this.lastTapId = id;
+      }
+    }
+
     if (changed && module && object) {
       if (cancelled) {
         module.position = this.dragOrigin.toArray() as Vector3Tuple;
@@ -647,6 +666,43 @@ export class Workbench {
     }
 
     return seen;
+  }
+
+  private trafficSpeedScale(position: THREE.Vector3, now: number) {
+    let scale = 1;
+
+    for (const module of this.graph.modules.values()) {
+      const dx = module.position[0] - position.x;
+      const dz = module.position[2] - position.z;
+      const d = Math.hypot(dx, dz);
+
+      if (module.type === 'traffic-light' && d < 1.55) {
+        if (module.switchOn === false) return 0;
+      }
+
+      if (module.type === 'speed-sign' && d < 2.25) {
+        scale = Math.min(scale, .45);
+      }
+
+      if (module.type === 'stop-sign') {
+        if (d > 1.8) {
+          this.stopLatch.delete(module.id);
+          this.stopUntil.delete(module.id);
+          continue;
+        }
+
+        if (d < 1.12 && !this.stopLatch.has(module.id)) {
+          this.stopLatch.add(module.id);
+          this.stopUntil.set(module.id, now + 1500);
+        }
+
+        if (d < 1.45 && now < (this.stopUntil.get(module.id) ?? 0)) {
+          return 0;
+        }
+      }
+    }
+
+    return scale;
   }
 
   private nearestRouteT(curve: THREE.CatmullRomCurve3, position: THREE.Vector3) {
@@ -714,7 +770,12 @@ export class Workbench {
           progress = this.nearestRouteT(curve, new THREE.Vector3(...module.position));
         }
 
-        const unitsPerSecond = .8 + Math.abs(speed) / 120 * 1.25;
+        const currentReverse = progress > 1;
+        const currentT = currentReverse ? 2 - progress : progress;
+        const currentPoint = curve.getPointAt(currentT);
+        const trafficScale = this.trafficSpeedScale(currentPoint, now);
+
+        const unitsPerSecond = (.8 + Math.abs(speed) / 120 * 1.25) * trafficScale;
         progress = (progress + (unitsPerSecond / length) * dt) % 2;
         this.vehicleProgress.set(id, progress);
 
