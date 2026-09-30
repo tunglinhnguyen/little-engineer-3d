@@ -50,20 +50,19 @@ async function dragToPose(page:Page,id:string,pose:Pose,holdMs=0){
 }
 
 async function install(page:Page,type:string,slotKey?:string){
-  const id=type==='wheel'
-    ? (await ids(page,'wheel')).find(async candidate=>!(await qa<boolean>(page,'isInstalled',candidate)))
-    : await firstId(page,type);
+  let resolved:string|undefined;
 
-  let resolved=id;
   if(type==='wheel'){
-    const wheelIds=await ids(page,'wheel');
-    for(const candidate of wheelIds){
+    for(const candidate of await ids(page,'wheel')){
       if(!(await qa<boolean>(page,'isInstalled',candidate))){
         resolved=candidate;
         break;
       }
     }
+  }else{
+    resolved=await firstId(page,type);
   }
+
   if(!resolved) throw new Error('No loose '+type);
 
   const pose=await qa<Pose|null>(page,'targetPose',type,slotKey);
