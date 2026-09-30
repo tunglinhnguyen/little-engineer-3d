@@ -26,6 +26,7 @@ export interface ModulePort {
   direction: PortDirection;
   position: Vector3Tuple;
   axis: Vector3Tuple;
+  mate?: string;
 }
 
 export type ModuleBehavior =
@@ -58,6 +59,15 @@ export interface ModuleInstance {
   rotationY: number;
   switchOn?: boolean;
   slotKey?: string;
+  parentId?: string;
+}
+
+export interface Placement {
+  position: Vector3Tuple;
+  rotationY: number;
+  slotKey?: string;
+  parentId?: string;
+  label?: string;
 }
 
 export interface Connection {

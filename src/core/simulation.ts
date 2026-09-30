@@ -2,128 +2,45 @@ import { MODULES } from './moduleRegistry';
 import { ConnectionGraph } from './connectionGraph';
 import type { SimulationState } from './types';
 
-const MOTOR_CURRENT = .45;
-
 export class SimulationEngine {
-  constructor(private graph: ConnectionGraph) {}
-
-  evaluate(): SimulationState {
-    const powered = new Set<string>();
-    const active = new Set<string>();
-    const rpm = new Map<string, number>();
-    const voltage = new Map<string, number>();
-    const current = new Map<string, number>();
-    const torque = new Map<string, number>();
-
-    const powerQueue: string[] = [];
-
-    for (const module of this.graph.modules.values()) {
-      const behavior = MODULES[module.type].behavior;
-      if (behavior.kind !== 'source') continue;
-      powered.add(module.id);
-      active.add(module.id);
-      voltage.set(module.id, behavior.voltage);
-      powerQueue.push(module.id);
+ constructor(private graph:ConnectionGraph){}
+ evaluate():SimulationState{
+  const powered=new Set<string>(),active=new Set<string>(),rpm=new Map<string,number>(),voltage=new Map<string,number>(),current=new Map<string,number>(),torque=new Map<string,number>();
+  const supplyEdges=(id:string)=>this.graph.outgoing(id,'power').filter(e=>MODULES[this.graph.modules.get(id)!.type].ports.find(p=>p.id===e.fromPortId)?.mate==='supply');
+  const sources=[...this.graph.modules.values()].filter(m=>MODULES[m.type].behavior.kind==='source');
+  for(const source of sources){
+   const behavior=MODULES[source.type].behavior;if(behavior.kind!=='source')continue;
+   powered.add(source.id);voltage.set(source.id,behavior.voltage);current.set(source.id,0);
+   const seen=new Set([source.id]),queue=[source.id];
+   for(let i=0;i<queue.length;i++){
+    const id=queue[i],module=this.graph.modules.get(id)!;
+    if(module.type==='switch'&&module.switchOn===false)continue;
+    for(const e of supplyEdges(id)){
+     const next=this.graph.modules.get(e.toModuleId);if(!next||seen.has(next.id))continue;
+     seen.add(next.id);powered.add(next.id);voltage.set(next.id,behavior.voltage);queue.push(next.id);
+     // A positive feed alone cannot run a motor: its return must reach the same battery.
+     if(next.type==='motor'&&this.graph.outgoing(next.id,'power').some(c=>c.fromPortId==='return-out'&&c.toModuleId===source.id&&c.toPortId==='return-in')){
+      const motor=MODULES.motor.behavior;if(motor.kind!=='motor')continue;
+      active.add(next.id);rpm.set(next.id,motor.rpm);torque.set(next.id,motor.torque);current.set(next.id,.45);current.set(source.id,(current.get(source.id)??0)+.45);
+     }
     }
-
-    while (powerQueue.length) {
-      const id = powerQueue.shift()!;
-      const volts = voltage.get(id) ?? 6;
-
-      for (const edge of this.graph.outgoing(id, 'power')) {
-        const next = this.graph.modules.get(edge.toModuleId);
-        if (!next || powered.has(next.id)) continue;
-
-        const behavior = MODULES[next.type].behavior;
-        if (behavior.kind === 'switch' && next.switchOn === false) continue;
-
-        powered.add(next.id);
-        active.add(next.id);
-        voltage.set(next.id, volts);
-        if (next.type === 'motor') current.set(next.id, MOTOR_CURRENT);
-        powerQueue.push(next.id);
-      }
-    }
-
-    const rotationQueue: Array<{ id: string; rpm: number; torque: number }> = [];
-
-    for (const module of this.graph.modules.values()) {
-      const behavior = MODULES[module.type].behavior;
-      if (behavior.kind !== 'motor' || !powered.has(module.id)) continue;
-
-      rpm.set(module.id, behavior.rpm);
-      torque.set(module.id, behavior.torque);
-      active.add(module.id);
-      rotationQueue.push({
-        id: module.id,
-        rpm: behavior.rpm,
-        torque: behavior.torque,
-      });
-    }
-
-    while (rotationQueue.length) {
-      const node = rotationQueue.shift()!;
-
-      for (const edge of this.graph.outgoing(node.id, 'rotation')) {
-        const next = this.graph.modules.get(edge.toModuleId);
-        if (!next || rpm.has(next.id)) continue;
-
-        const behavior = MODULES[next.type].behavior;
-        let nextRpm = node.rpm;
-        let nextTorque = node.torque * .98;
-        let propagates = false;
-
-        if (behavior.kind === 'transmission') {
-          nextRpm = node.rpm * behavior.ratio;
-          nextTorque =
-            node.torque / Math.max(.05, Math.abs(behavior.ratio)) *
-            behavior.efficiency;
-          propagates = true;
-        } else if (behavior.kind === 'pass-rotation') {
-          nextTorque = node.torque * behavior.efficiency;
-          propagates = true;
-        } else if (behavior.kind === 'vehicle') {
-          propagates = true;
-        } else if (behavior.kind === 'wheel') {
-          propagates = false;
-        }
-
-        rpm.set(next.id, nextRpm);
-        torque.set(next.id, nextTorque);
-        active.add(next.id);
-
-        if (propagates) {
-          rotationQueue.push({
-            id: next.id,
-            rpm: nextRpm,
-            torque: nextTorque,
-          });
-        }
-      }
-    }
-
-    for (const source of this.graph.modules.values()) {
-      const behavior = MODULES[source.type].behavior;
-      if (behavior.kind !== 'source') continue;
-
-      let amps = 0;
-      const seen = new Set<string>([source.id]);
-      const queue = [source.id];
-
-      while (queue.length) {
-        const id = queue.shift()!;
-        for (const edge of this.graph.outgoing(id, 'power')) {
-          const next = this.graph.modules.get(edge.toModuleId);
-          if (!next || seen.has(next.id) || !powered.has(next.id)) continue;
-          seen.add(next.id);
-          if (next.type === 'motor') amps += MOTOR_CURRENT;
-          queue.push(next.id);
-        }
-      }
-
-      current.set(source.id, amps);
-    }
-
-    return { powered, active, rpm, voltage, current, torque };
+   }
   }
+  const queue=[...rpm.keys()];
+  for(let i=0;i<queue.length;i++){
+   const id=queue[i];
+   for(const e of this.graph.outgoing(id,'rotation')){
+    const next=this.graph.modules.get(e.toModuleId);if(!next||rpm.has(next.id))continue;
+    const b=MODULES[next.type].behavior;let speed=rpm.get(id)!,force=torque.get(id)!;
+    if(b.kind==='transmission'){speed*=b.ratio;force=force/Math.abs(b.ratio)*b.efficiency;}
+    else if(b.kind==='pass-rotation')force*=b.efficiency;
+    else if(b.kind==='wheel')force*=.5;
+    else continue; // Neither a chassis nor a passive front axle receives RPM.
+    rpm.set(next.id,speed);torque.set(next.id,force);active.add(next.id);
+    if(b.kind!=='wheel')queue.push(next.id);
+   }
+  }
+  for(const id of powered)if((current.get(id)??0)>0||this.graph.modules.get(id)?.type==='switch'&&this.graph.modules.get(id)?.switchOn!==false)active.add(id);
+  return {powered,active,rpm,voltage,current,torque};
+ }
 }

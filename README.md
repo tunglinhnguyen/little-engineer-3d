@@ -1,71 +1,28 @@
-# 🚗 Little Engineer 3D — Car Lab
+# Little Engineer 3D — Car Lab
 
-Little Engineer 3D hiện được **thu gọn về một mục tiêu duy nhất**: trẻ ráp một ô tô điện từ các mô-đun chức năng, kiểm tra đúng chuỗi truyền năng lượng, rồi cho xe chạy trên đường thử 3D.
+Bàn lắp ô tô điện 3D: lấy từng chi tiết, kéo vào khớp đúng, thử máy tại chỗ, rồi đặt cả xe lên đường để chạy.
 
-## Phạm vi hiện tại
+Xe gồm **12 chi tiết**: khung, pin, công tắc, mô tơ, hộp số, vi sai, trục trước, trục sau và bốn bánh. Khay đường có đường thẳng, đường cong, ngã tư, đèn giao thông, biển STOP và biển 30. Có thể chọn chi tiết theo thứ tự bất kỳ; chọn trong khay chỉ lấy ra bàn.
 
-Bàn lắp chỉ đưa ra 6 mô-đun theo đúng thứ tự học:
+- Kéo chi tiết rời gần đúng khớp để lắp. Bánh cần trục và ổ bánh thật; mỗi khớp chỉ chứa một chi tiết.
+- Giữ 0,5 giây rồi kéo để tháo chi tiết đã lắp. Kéo khung mang cả xe; kéo trục mang theo bánh. Chạm ngắn không tháo.
+- Công tắc mặc định tắt. **Thử máy** quay cơ cấu tại chỗ; **Chạy xe** chỉ mở khi đủ chi tiết, có nguồn và xe đặt đúng trên đường.
+- Nối hai cực pin qua công tắc và mô tơ thành mạch kín. Tốc độ truyền: mô tơ 120 RPM → hộp số −60 RPM → vi sai/trục sau 20 RPM. Khung và trục trước không nhận RPM truyền động.
+- Tốc độ xe tính từ RPM bánh và chu vi lốp. Bánh trước đánh lái, bánh trong/ngoài quay khác nhau ở đường cong. Xe dừng trước cuối đường, đèn đỏ và STOP; bật xanh tiếp tục từ vị trí đang đứng.
+- Đường và biển được kéo lắp riêng. Biển rời không điều khiển xe. Có lưu bàn lắp, hoàn tác/làm lại, camera trên/nghiêng và đưa xe về vị trí xuất phát.
 
-1. Pin
-2. Công tắc
-3. Mô tơ
-4. Hộp số
-5. Vi sai
-6. Khung xe + 4 bánh
-
-Đường thử được tạo sẵn và khóa vị trí. Trẻ không phải quản lý nhà cửa, tàu, nước, địa hình, blueprint, thành tích hay các công cụ phụ trước khi hiểu được chiếc ô tô hoạt động.
-
-## Chuỗi chức năng
-
-```text
-Pin → Công tắc → Mô tơ → Hộp số → Vi sai → Khung xe
- điện                chuyển động quay
-```
-
-- Cổng điện chỉ nối với cổng điện.
-- Cổng quay chỉ nối với cổng quay.
-- Mô tơ chỉ quay khi Công tắc đóng.
-- Hộp số giảm tốc và tăng lực kéo.
-- Vi sai truyền mô-men tới cụm bánh.
-- Xe chỉ chạy khi chuỗi truyền động hoàn chỉnh và ở gần đường thử.
-
-## Tương tác đã tối giản
-
-Khi chọn một mô-đun, chỉ còn các thao tác cần thiết:
-
-- **Gắn**: tự tìm và snap vào khớp phù hợp gần nhất.
-- **Xoay**: xoay 90°.
-- **Tháo**: ngắt các khớp của riêng mô-đun đó.
-- **Xóa**: bỏ mô-đun khỏi xe.
-- Riêng **Công tắc** có nút **Bật/Tắt** trực tiếp.
-
-Các nút được thiết kế lớn, ít chữ và phù hợp thao tác cảm ứng trên iPad.
-
-## Chạy local
+## Chạy và kiểm tra
 
 ```bash
-npm install
+npm ci
 npm run dev
-```
-
-Kiểm tra:
-
-```bash
 npm run check
 npm run build
 npm run qa:e2e
 ```
 
-CI chạy unit tests, build production và 5 browser acceptance tests; các ảnh chụp được lưu trong artifact `car-focus-screenshots`.
+GitHub Actions chạy kiểm tra lõi, build production và kiểm tra trình duyệt trước khi deploy Pages. Ảnh từng module và các luồng lắp/chạy/cảm ứng nằm trong artifact `car-focus-screenshots`.
 
-## Kiến trúc đang dùng
+Xem [kiến trúc](docs/architecture.md), [module và khớp](docs/module-schema.md), [ma trận kiểm tra](docs/qa-report.md).
 
-```text
-Car UI
-  ├─ ConnectionGraph — typed ports + snap
-  ├─ SimulationEngine — power + RPM + torque
-  ├─ VehicleRules / WorldRoutes — điều kiện chạy + tuyến đường
-  └─ Three.js Workbench — render, drag, camera, animation
-```
-
-Mục tiêu tiếp theo chỉ mở rộng khi trải nghiệm ráp và chạy ô tô đã ổn định trên iPad.
+Đây là mô hình cơ học giáo dục xác định theo khớp và tuyến đường, chưa phải mô phỏng vật lý vật rắn, va chạm hay lực bám lốp. Kiểm tra cảm ứng tự động dùng Chromium mô phỏng tablet; cần kiểm tra bổ sung trên thiết bị iPad thật.

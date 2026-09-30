@@ -10,6 +10,7 @@ import type {
 
 export function portsCompatible(a: ModulePort, b: ModulePort) {
   if (a.signal !== b.signal) return false;
+  if (a.mate !== b.mate) return false;
   if (a.direction === 'bi' && b.direction === 'bi') return true;
   return (
     (a.direction === 'out' && b.direction === 'in') ||
@@ -112,7 +113,21 @@ export class ConnectionGraph {
   }
 
   connect(connection: Connection) {
-    this.connections.set(connection.id, connection);
+    const a=this.modules.get(connection.fromModuleId),b=this.modules.get(connection.toModuleId);
+    if(!a||!b||a.id===b.id)return false;
+    const ap=MODULES[a.type].ports.find(p=>p.id===connection.fromPortId);
+    const bp=MODULES[b.type].ports.find(p=>p.id===connection.toPortId);
+    if(!ap||!bp||!portsCompatible(ap,bp)||ap.signal!==connection.signal)return false;
+    const normalized=normalizeConnection(a,ap,b,bp);
+    if(!normalized)return false;
+    const previous=this.connections.get(connection.id);
+    if(previous)this.connections.delete(connection.id);
+    if(this.isPortUsed(a.id,ap.id)||this.isPortUsed(b.id,bp.id)){
+      if(previous)this.connections.set(previous.id,previous);
+      return false;
+    }
+    this.connections.set(connection.id,{id:connection.id,...normalized});
+    return true;
   }
 
   disconnectModule(id: string) {
@@ -176,7 +191,7 @@ export class ConnectionGraph {
             const distance = length(sub(position, moving.position));
             if (distance > maxDistance) continue;
 
-            if (!best || distance < best.distance) {
+            if (!best || distance < best.distance - .0001 || Math.abs(distance-best.distance)<.0001 && Math.abs(Math.atan2(Math.sin(rotationY-moving.rotationY),Math.cos(rotationY-moving.rotationY))) < Math.abs(Math.atan2(Math.sin(best.rotationY-moving.rotationY),Math.cos(best.rotationY-moving.rotationY)))) {
               best = {
                 movingPort,
                 otherPort,
@@ -235,7 +250,7 @@ export class ConnectionGraph {
           const position = sub(targetWorldPort, movingOffset);
           const distance = length(sub(position, moving.position));
 
-          if (!best || distance < best.distance) {
+          if (!best || distance < best.distance - .0001 || Math.abs(distance-best.distance)<.0001 && Math.abs(Math.atan2(Math.sin(rotationY-moving.rotationY),Math.cos(rotationY-moving.rotationY))) < Math.abs(Math.atan2(Math.sin(best.rotationY-moving.rotationY),Math.cos(best.rotationY-moving.rotationY)))) {
             best = {
               movingPort,
               otherPort: targetPort,
@@ -333,9 +348,9 @@ export class ConnectionGraph {
         id: module.id,
         type: module.type,
         position: [
-          Number(module.position[0]) || 0,
-          Number(module.position[1]) || .65,
-          Number(module.position[2]) || 0,
+          Number.isFinite(module.position[0]) ? module.position[0] : 0,
+          Number.isFinite(module.position[1]) ? module.position[1] : 0,
+          Number.isFinite(module.position[2]) ? module.position[2] : 0,
         ],
         rotationY: Number.isFinite(module.rotationY) ? module.rotationY : 0,
         switchOn:
@@ -343,6 +358,7 @@ export class ConnectionGraph {
             ? module.switchOn !== false
             : undefined,
         slotKey: typeof module.slotKey === 'string' ? module.slotKey : undefined,
+        parentId: typeof module.parentId === 'string' ? module.parentId : undefined,
       });
     }
 
