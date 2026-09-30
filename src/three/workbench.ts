@@ -160,7 +160,11 @@ export class Workbench {
     const object = this.objects.get(this.selectedId);
     if (!module || !object) return false;
 
-    const joined = this.graph.snapModule(module.id);
+    let joined = false;
+    for (let i = 0; i < 4; i++) {
+      if (!this.graph.snapModule(module.id)) break;
+      joined = true;
+    }
     object.position.set(...module.position);
     object.rotation.y = module.rotationY;
     this.refreshConnectionVisuals();
@@ -489,7 +493,9 @@ export class Workbench {
         module.position = this.dragOrigin.toArray() as [number, number, number];
         for (const connection of this.dragConnections) this.graph.connect(connection);
       } else {
-        this.graph.snapModule(module.id);
+        for (let i = 0; i < 4; i++) {
+          if (!this.graph.snapModule(module.id)) break;
+        }
       }
 
       object.position.set(...module.position);
