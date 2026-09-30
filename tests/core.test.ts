@@ -94,9 +94,20 @@ describe('focused car module rules', () => {
     const state = new SimulationEngine(graph).evaluate();
     expect(vehicleCanTravel(graph,car.id,state.rpm).ready).toBe(false);
 
-    const road = part('road','road-straight');
-    road.position = [0,.65,1.4];
-    graph.addModule(road);
+    const roadA = part('road-a','road-straight');
+    const roadB = part('road-b','road-straight');
+    roadA.position = [0,.65,1.4];
+    roadB.position = [0,.65,4.288];
+    graph.addModule(roadA);
+    graph.addModule(roadB);
+    graph.connect({
+      id:'road-near-link',
+      fromModuleId:roadA.id,
+      fromPortId:'structure-front',
+      toModuleId:roadB.id,
+      toPortId:'structure-back',
+      signal:'structural',
+    });
     expect(vehicleCanTravel(graph,car.id,state.rpm).ready).toBe(true);
   });
 
