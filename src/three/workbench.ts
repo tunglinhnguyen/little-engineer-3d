@@ -230,6 +230,7 @@ export class Workbench {
   }
 
   screenPointForWorld(position: Vector3Tuple) {
+    this.camera.updateMatrixWorld();
     const rect = this.canvas.getBoundingClientRect();
     const point = new THREE.Vector3(...position).project(this.camera);
     return {
@@ -239,6 +240,7 @@ export class Workbench {
   }
 
   screenPointForModule(id: string) {
+    this.camera.updateMatrixWorld();
     const object = this.objects.get(id);
     if (!object) return null;
 

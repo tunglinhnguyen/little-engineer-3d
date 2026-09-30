@@ -15,7 +15,9 @@ async function qa<T=any>(page:Page,method:string,...args:any[]):Promise<T>{
 
 async function snapshot(page:Page){ return qa<any>(page,'snapshot'); }
 async function shot(page:Page,name:string){
-  await page.screenshot({path:'test-results/car/'+name+'.png'});
+  await page.locator('#focusAll').click();
+  await page.waitForTimeout(250);
+  await page.screenshot({path:'test-results/car/'+name});
 }
 
 async function ids(page:Page,type:string){
@@ -44,7 +46,7 @@ async function dragToPose(page:Page,id:string,pose:Pose,holdMs=0){
   await page.mouse.move(start.x,start.y);
   await page.mouse.down();
   if(holdMs) await page.waitForTimeout(holdMs);
-  await page.mouse.move(target.x,target.y,{steps:14});
+  await page.mouse.move(target.x,target.y,{steps:4});
   await page.mouse.up();
   await page.waitForTimeout(180);
 }
@@ -123,7 +125,7 @@ test('01 all car modules are selectable in any order and click only places a loo
   expect(state.modules.some((m:any)=>m.type==='battery'&&!m.slotKey)).toBe(true);
   expect(state.modules.some((m:any)=>m.type==='wheel'&&!m.slotKey)).toBe(true);
 
-  await expect(page.locator('#coach')).toContainText('Khung');
+  await expect(page.locator('#coach')).toContainText('Đường thẳng');
   await shot(page,'01-free-order-loose-parts.png');
 });
 
@@ -142,6 +144,9 @@ test('02 child manually drags all 12 pieces and magnetic assist only finishes ne
 test('03 installed part is tap-safe and only detaches after deliberate hold then drag',async({page})=>{
   await assembleFullCar(page);
 
+  // Bring the installed motor into view before testing canvas gestures.
+  await page.locator('.part').nth(3).click();
+  await page.waitForTimeout(250);
   const motorId=await firstId(page,'motor');
   const before=await qa<any>(page,'rendered',motorId);
   const start=await qa<Point>(page,'screen',motorId);
@@ -150,6 +155,7 @@ test('03 installed part is tap-safe and only detaches after deliberate hold then
   await page.mouse.click(start.x,start.y);
   await page.waitForTimeout(100);
   expect(await qa(page,'rendered',motorId)).toEqual(before);
+  await expect(page.locator('#selectionPanel')).toContainText('Mô tơ');
 
   // Accidental quick swipe before the hold threshold is ignored.
   await page.mouse.move(start.x,start.y);

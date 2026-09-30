@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.log
 .vscode/
+
+playwright-report/
+test-results/
+*.tsbuildinfo

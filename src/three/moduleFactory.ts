@@ -223,6 +223,12 @@ export function createModuleObject(instance:ModuleInstance){
   else if(instance.type==='stop-sign') stopSign(g);
   else if(instance.type==='speed-sign') speedSign(g);
 
+  // Compact components must fit their chassis slots without covering neighbours.
+  // Keep connector coordinates in the registry's world scale.
+  if(['battery','switch','motor','gearbox','differential'].includes(instance.type)){
+    for(const child of g.children){child.position.multiplyScalar(.45);child.scale.multiplyScalar(.45);}
+  }
+
   addPorts(g,instance);
   g.traverse(child=>{child.userData.moduleId=instance.id; child.userData.moduleRoot=g;});
   return g;
