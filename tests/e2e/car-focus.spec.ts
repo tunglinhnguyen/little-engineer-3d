@@ -145,7 +145,7 @@ test('03 installed part ignores tap and quick drag, but hold then drag detaches 
 
   expect(await qa(page, 'isInstalled', motorId)).toBe(false);
   expect((await snapshot(page)).ready).toBe(false);
-  await expect(page.locator('#gestureHint')).toContainText('kéo');
+  await expect(page.locator('#gestureHint')).toContainText('Kéo');
   await shot(page, '03-hold-to-detach.png');
 });
 
