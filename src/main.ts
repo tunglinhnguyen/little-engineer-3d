@@ -295,7 +295,7 @@ function addCarPart(type: ModuleType) {
 
   workbench.addInstance(instance, previous?.id ?? null);
   if (previous) {
-    graph.snapModule(instance.id, 1.25);
+    graph.snapModule(instance.id);
     workbench.rebuildFromGraph();
     workbench.selectById(instance.id);
   }
