@@ -44,12 +44,14 @@ const CAR_YAW = -Math.PI / 2;
 const CHASSIS_HOME: Vector3Tuple = [.8, .65, -4.9];
 
 const STAGING: Record<Exclude<ModuleType, 'road-straight'>, Vector3Tuple> = {
-  'car-base': [-4.1, .65, -5.0],
-  battery: [-5.25, .65, -2.8],
-  switch: [-3.75, .65, -2.8],
-  motor: [-5.25, .65, -4.05],
-  gearbox: [-3.75, .65, -4.05],
-  differential: [-2.35, .65, -3.45],
+  // Loose parts deliberately do not overlap. A child can grab the center
+  // of any module without accidentally picking another object above it.
+  'car-base': [-5.0, .65, -6.5],
+  battery: [-6.0, .65, -3.25],
+  switch: [-4.35, .65, -3.25],
+  motor: [-6.0, .65, -4.65],
+  gearbox: [-4.35, .65, -4.65],
+  differential: [-2.75, .65, -3.95],
 };
 
 const LOCAL_SLOTS: Record<Exclude<ModuleType, 'road-straight' | 'car-base'>, Vector3Tuple> = {
