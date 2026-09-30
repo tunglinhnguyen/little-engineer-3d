@@ -71,8 +71,8 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
     name: 'Khung xe + 4 bánh',
     icon: '🚗',
     description: 'Khung ô tô nhận mô-men từ bộ vi sai.',
-    size: [2.65, .58, 1.45],
-    ports: [{ ...rotationIn, position: [-1.42, 0, 0] }],
+    size: [3.25, .62, 1.9],
+    ports: [{ ...rotationIn, position: [-1.62, 0, 0] }],
     behavior: { kind: 'vehicle', vehicleSpeed: 1.0 },
   },
   'road-straight': {
@@ -96,10 +96,10 @@ export const MODULES: Record<ModuleType, ModuleDefinition> = {
 };
 
 export const CAR_PALETTE: ModuleType[] = [
+  'car-base',
   'battery',
   'switch',
   'motor',
   'gearbox',
   'differential',
-  'car-base',
 ];
