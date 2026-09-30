@@ -497,6 +497,20 @@ if(new URLSearchParams(location.search).has('qa')){
     screen(id:string){return workbench.screenPointForModule(id);},
     screenWorld(position:Vector3Tuple){return workbench.screenPointForWorld(position);},
     snapPose(id:string,position:Vector3Tuple){return getSnapPose(id,position);},
+    targetPose(type:ModuleType,slotKey?:string){
+      if(type==='car-base'){
+        const road=[...graph.modules.values()].find(m=>ROAD_TYPES.has(m.type));
+        return road?chassisPose(road.position):null;
+      }
+      if(type==='wheel'){
+        const key=slotKey??WHEEL_SLOTS.find(k=>!bySlot('car:'+k));
+        return key?slotPose(key):null;
+      }
+      if(UNIQUE_CAR.has(type)) return slotPose(type);
+      return null;
+    },
+    isAttached(id:string){return isAttached(graph.modules.get(id));},
+    isInstalled(id:string){return isCarInstalled(graph.modules.get(id));},
     spawn(type:ModuleType){spawn(type);return [...graph.modules.values()].filter(m=>m.type===type).at(-1)?.id??null;},
     forceRoad(type:ModuleType,position:Vector3Tuple,rotationY=0){
       const m:ModuleInstance={id:type+'-qa-'+crypto.randomUUID().slice(0,6),type,position,rotationY,switchOn:type==='traffic-light'?false:undefined};
