@@ -12,6 +12,7 @@ export interface WorkbenchHooks {
   onSelect(id: string | null): void;
   onGraphChanged(): void;
   canEdit(): boolean;
+  canMove?(id: string): boolean;
 }
 
 export class Workbench {
@@ -368,6 +369,33 @@ export class Workbench {
 
   removeSelected() { if (!this.selectedId || !this.hooks.canEdit()) return; this.finishDrag(true); this.graph.removeModule(this.selectedId); const o = this.objects.get(this.selectedId); if (o) this.root.remove(o); this.objects.delete(this.selectedId); this.refreshConnectionVisuals(); this.select(null); this.hooks.onGraphChanged(); }
 
+  snapSelected() {
+    if (!this.selectedId || !this.hooks.canEdit()) return false;
+    const module = this.graph.modules.get(this.selectedId);
+    const object = this.objects.get(this.selectedId);
+    if (!module || !object) return false;
+    const joined = this.graph.snapModule(module.id, 1.35);
+    object.position.set(...module.position);
+    object.rotation.y = module.rotationY;
+    this.refreshConnectionVisuals();
+    this.refreshPorts();
+    if (joined) this.hooks.onGraphChanged();
+    return joined;
+  }
+
+  detachSelected() {
+    if (!this.selectedId || !this.hooks.canEdit()) return false;
+    const module = this.graph.modules.get(this.selectedId);
+    if (!module) return false;
+    const count = this.graph.incoming(module.id).length + this.graph.outgoing(module.id).length;
+    if (!count) return false;
+    this.graph.disconnectModule(module.id);
+    this.refreshConnectionVisuals();
+    this.refreshPorts();
+    this.hooks.onGraphChanged();
+    return true;
+  }
+
   duplicateSelected() {
     if (!this.selectedId || !this.hooks.canEdit()) return;
     const source = this.graph.modules.get(this.selectedId);
@@ -682,7 +710,7 @@ export class Workbench {
       const hits = this.cast(e, [...this.objects.values()]); const root = hits[0]?.object.userData.moduleRoot as THREE.Group | undefined;
       if (!root) { this.select(null); return; }
       this.select(root.userData.moduleId);
-      if (!this.hooks.canEdit()) {
+      if (!this.hooks.canEdit() || this.hooks.canMove?.(root.userData.moduleId) === false) {
         this.registerTap(root.userData.moduleId, e);
         return;
       }
