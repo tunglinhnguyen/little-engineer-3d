@@ -374,7 +374,7 @@ export class Workbench {
     const module = this.graph.modules.get(this.selectedId);
     const object = this.objects.get(this.selectedId);
     if (!module || !object) return false;
-    const joined = this.graph.snapModule(module.id, 1.35);
+    const joined = this.graph.snapModule(module.id);
     object.position.set(...module.position);
     object.rotation.y = module.rotationY;
     this.refreshConnectionVisuals();
