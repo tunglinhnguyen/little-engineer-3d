@@ -648,24 +648,17 @@ export class Workbench {
     this.ray.setFromCamera(this.pointer, this.camera);
   }
 
-  private poweredAssembly(startId: string) {
-    const seen = new Set<string>([startId]);
-    const queue = [startId];
+  private vehicleAssembly(startId: string) {
+    const assembly = new Set<string>([startId]);
 
-    while (queue.length) {
-      const id = queue.shift()!;
-      const edges = [...this.graph.incoming(id), ...this.graph.outgoing(id)];
-
-      for (const edge of edges) {
-        if (edge.signal !== 'power' && edge.signal !== 'rotation') continue;
-        const otherId = edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId;
-        if (seen.has(otherId)) continue;
-        seen.add(otherId);
-        queue.push(otherId);
-      }
+    // Physical attachment is independent from the energy graph. Every part
+    // that is snapped into a car slot must travel with the chassis even when
+    // it is passive (front axle/front wheels).
+    for (const module of this.graph.modules.values()) {
+      if (module.slotKey?.startsWith('car:')) assembly.add(module.id);
     }
 
-    return seen;
+    return assembly;
   }
 
   private trafficSpeedScale(position: THREE.Vector3, now: number) {
@@ -742,7 +735,8 @@ export class Workbench {
 
       for (const [id, speed] of this.rpm) {
         const object = this.objects.get(id);
-        if (!object) continue;
+        const module = this.graph.modules.get(id);
+        if (!object || !module || module.type === 'wheel') continue;
 
         const angle = speed / 60 * Math.PI * 2 * dt;
         object.traverse(child => {
@@ -791,7 +785,7 @@ export class Workbench {
         if (reverse) tangent.multiplyScalar(-1);
 
         const yaw = Math.atan2(-tangent.z, tangent.x);
-        const assembly = this.poweredAssembly(id);
+        const assembly = this.vehicleAssembly(id);
         const base = new THREE.Vector3(...module.position);
         const deltaYaw = yaw - module.rotationY;
         const rotation = new THREE.Matrix4().makeRotationY(deltaYaw);
@@ -807,6 +801,19 @@ export class Workbench {
 
           object.position.copy(target).add(offset);
           object.rotation.y = model.rotationY + deltaYaw;
+        }
+
+        // All four wheels roll from vehicle ground speed. The rear pair is
+        // driven by the axle in the simulation; the front pair is passive.
+        const wheelAngle = (unitsPerSecond / .36) * dt * (reverse ? -1 : 1);
+        for (const partId of assembly) {
+          const model = this.graph.modules.get(partId);
+          const object = this.objects.get(partId);
+          if (!model || !object || model.type !== 'wheel') continue;
+          object.traverse(child => {
+            if (!child.userData.rotor) return;
+            child.rotation.z += wheelAngle;
+          });
         }
       }
     }
