@@ -168,3 +168,13 @@ button:disabled{opacity:.38;filter:saturate(.65)}
   .part .part-icon{font-size:22px}
   .part b{font-size:8.5px}
 }
+
+.gesture-hint{
+  margin-top:7px;padding:7px 8px;border-radius:10px;background:#f1f6f8;
+  color:#506a78;font-size:8px;line-height:1.35;font-weight:760
+}
+.part.present{background:#fff2c9}
+.part.present .step-no{background:#f3c84f;color:#173247}
+.part.done{box-shadow:inset 0 0 0 2px #7bcf9a,inset 0 -3px 0 rgba(33,58,71,.06)}
+.module-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+.module-actions button:last-child:nth-child(3){grid-column:1/-1}
