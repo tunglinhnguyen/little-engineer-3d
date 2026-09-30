@@ -109,20 +109,29 @@ function differential(group: THREE.Group) {
 }
 
 function car(group: THREE.Group) {
-  addBox(group,[2.65,.34,1.35],0x2d6f9c,[0,-.08,0]);
-  addBox(group,[1.25,.48,1.1],0x4ca3d4,[.25,.28,0]);
-  addBox(group,[.72,.34,1.02],0xbfe8f5,[.38,.54,0]);
+  // Open technical chassis: components mounted above remain visible and
+  // visually read as parts of one vehicle instead of a chain beside it.
+  addBox(group,[3.25,.18,1.78],0x244c67,[0,-.24,0]);
+  addBox(group,[3.05,.18,.18],0x2f6f94,[0,-.04,.73]);
+  addBox(group,[3.05,.18,.18],0x2f6f94,[0,-.04,-.73]);
+  addBox(group,[.18,.18,1.55],0x2f6f94,[-1.18,-.04,0]);
+  addBox(group,[.18,.18,1.55],0x2f6f94,[0,-.04,0]);
+  addBox(group,[.18,.18,1.55],0x2f6f94,[1.18,-.04,0]);
 
-  for (const x of [-.82,.82]) {
-    for (const z of [-.72,.72]) {
+  // Low front cowl keeps the car recognizable but leaves the drivetrain visible.
+  addBox(group,[.72,.28,1.42],0x4ca3d4,[1.18,.08,0]);
+  addBox(group,[.12,.32,1.32],0xbfe8f5,[.78,.28,0]);
+
+  for (const x of [-1.18,1.18]) {
+    for (const z of [-.94,.94]) {
       const rotor = new THREE.Group();
-      rotor.position.set(x,-.28,z);
+      rotor.position.set(x,-.34,z);
       rotor.userData.rotor = true;
       rotor.userData.rotorAxis = 'z';
       group.add(rotor);
 
       const tire = new THREE.Mesh(
-        new THREE.CylinderGeometry(.31,.31,.19,22),
+        new THREE.CylinderGeometry(.34,.34,.22,22),
         material(0x242a2f,.05,.82),
       );
       tire.rotation.x = Math.PI / 2;
@@ -130,7 +139,7 @@ function car(group: THREE.Group) {
       rotor.add(tire);
 
       const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(.12,.12,.21,18),
+        new THREE.CylinderGeometry(.13,.13,.24,18),
         material(0xc6d0d5,.45,.32),
       );
       hub.rotation.x = Math.PI / 2;
