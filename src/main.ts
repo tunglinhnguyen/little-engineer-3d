@@ -232,17 +232,30 @@ function assignSlotAfterDrop(module:ModuleInstance,snapped:boolean){
   }
 }
 
+function isCarInstalled(module:ModuleInstance|undefined){
+  if(!module||!isCarPart(module)) return false;
+  if(module.type==='car-base'){
+    if(!module.slotKey?.startsWith('road:')) return false;
+    const road=graph.modules.get(module.slotKey.slice(5));
+    return Boolean(road&&ROAD_TYPES.has(road.type)&&distXZ(module.position,road.position)<.18);
+  }
+  if(!module.slotKey?.startsWith('car:')) return false;
+  const key=module.slotKey.slice(4);
+  const pose=slotPose(key);
+  return Boolean(pose&&distXZ(module.position,pose.position)<.13);
+}
+
 function installedCarCount(){
   let n=0;
   for(const type of ['car-base','battery','switch','motor','gearbox','differential','front-axle','drive-axle'] as ModuleType[]){
-    const m=first(type); if(m?.slotKey) n++;
+    const m=first(type); if(isCarInstalled(m)) n++;
   }
-  n+=modulesOf('wheel').filter(m=>m.slotKey?.startsWith('car:wheel-')).length;
+  n+=modulesOf('wheel').filter(m=>isCarInstalled(m)).length;
   return n;
 }
 
 function connectPair(from:ModuleInstance|undefined,fromPortId:string,to:ModuleInstance|undefined,toPortId:string,id:string){
-  if(!from||!to||!from.slotKey||!to.slotKey) return;
+  if(!from||!to||!isCarInstalled(from)||!isCarInstalled(to)) return;
   const exists=[...graph.connections.values()].some(c=>c.fromModuleId===from.id&&c.toModuleId===to.id&&c.fromPortId===fromPortId&&c.toPortId===toPortId);
   if(exists) return;
   const fp=MODULES[from.type].ports.find(p=>p.id===fromPortId);
@@ -267,7 +280,7 @@ function status(){
   const state=simulator.evaluate();
   const car=first('car-base');
   const count=installedCarCount();
-  const wheels=modulesOf('wheel').filter(m=>m.slotKey?.startsWith('car:wheel-'));
+  const wheels=modulesOf('wheel').filter(m=>isCarInstalled(m));
   const connected=Boolean(graph.findPathByTypes(['battery','switch','motor','gearbox','differential','drive-axle','car-base','front-axle']));
   const wheelDrive=wheels.length===4&&wheels.every(w=>state.rpm.has(w.id));
   const roadReady=Boolean(car&&vehicleCanTravel(graph,car.id,state.rpm).ready);
