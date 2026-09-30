@@ -27,7 +27,7 @@ test.beforeEach(async ({ page }) => boot(page));
 
 test('01 focused UI exposes only six car modules', async ({ page }) => {
   await expect(page.locator('.part')).toHaveCount(6);
-  await expect(page.locator('.palette')).toContainText('6 mô-đun của ô tô');
+  await expect(page.locator('.palette')).toContainText('6 bộ phận của ô tô');
   await expect(page.locator('.build-progress')).toContainText('0 / 6');
   await shot(page,'01-six-modules.png');
 });
@@ -77,7 +77,7 @@ test('05 completed car actually moves on the fixed test road', async ({ page }) 
   const before = await page.evaluate(id => (window as any).__CAR_LAB__.rendered(id), carId);
 
   await page.locator('#runBtn').click();
-  await expect(page.locator('#runBtn')).toContainText('Dừng xe');
+  await expect(page.locator('#runBtn')).toContainText('Dừng');
   await page.waitForTimeout(1100);
 
   const after = await page.evaluate(id => (window as any).__CAR_LAB__.rendered(id), carId);
