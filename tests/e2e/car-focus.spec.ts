@@ -44,21 +44,21 @@ test('02 six taps build the complete drivetrain', async ({ page }) => {
 
 test('03 selected module actions stay compact and useful', async ({ page }) => {
   await buildCar(page);
-  await page.locator('.part').nth(2).click();
+  await page.locator('.part').nth(3).click();
   await expect(page.locator('#selectionPanel')).toBeVisible();
-  await expect(page.locator('#moduleActions button')).toHaveCount(4);
+  await expect(page.locator('#moduleActions button')).toHaveCount(2);
 
   await page.locator('#detachPart').click();
   expect((await snapshot(page)).ready).toBe(false);
 
-  await page.locator('#snapPart').click();
+  await page.locator('#installPart').click();
   expect((await snapshot(page)).ready).toBe(true);
   await shot(page,'03-module-actions.png');
 });
 
 test('04 switch button directly controls readiness', async ({ page }) => {
   await buildCar(page);
-  await page.locator('.part').nth(1).click();
+  await page.locator('.part').nth(2).click();
 
   await page.locator('#togglePart').click();
   expect((await snapshot(page)).ready).toBe(false);
