@@ -1,6 +1,8 @@
-# Module schema
+# Car module schema
 
-Ví dụ một mô tơ:
+Every active car part is a typed module instance.
+
+Example motor definition:
 
 ```ts
 {
@@ -13,23 +15,24 @@ Ví dụ một mô tơ:
 }
 ```
 
-## Connector invariants
+## Active connector rules
 
-- Hai port chỉ snap nếu `signal` giống nhau.
-- `out` chỉ nối `in`; `bi` có thể nối cả hai.
-- Một port chỉ có một connection trong MVP.
-- Connection được lưu theo hướng dữ liệu/năng lượng, không theo thứ tự người dùng kéo.
+- Electrical ports connect only to electrical ports.
+- Rotation ports connect only to rotation ports.
+- Output connects to input.
+- Each port can be occupied by only one connection.
+- Connections are normalized in energy-flow direction.
 
-## Signal types
+## Active modules
 
-- `power`: điện năng.
-- `rotation`: tốc độ quay (RPM).
-- `structural`: dự kiến cho khung/pin ở giai đoạn physics.
+```text
+battery
+switch
+motor
+gearbox
+differential
+car-base
+road-straight  // fixed test infrastructure
+```
 
-## Adding a module
-
-1. Thêm `ModuleType`.
-2. Thêm definition trong `moduleRegistry.ts`.
-3. Thêm procedural mesh hoặc GLB loader trong `moduleFactory.ts`.
-4. Nếu behavior mới, bổ sung propagation rule trong `simulation.ts`.
-5. Thêm unit test và ít nhất một mission hoặc sandbox use case.
+The UI intentionally exposes no other module family in the current release.
