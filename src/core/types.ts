@@ -6,8 +6,16 @@ export type ModuleType =
   | 'motor'
   | 'gearbox'
   | 'differential'
+  | 'front-axle'
+  | 'drive-axle'
+  | 'wheel'
   | 'car-base'
-  | 'road-straight';
+  | 'road-straight'
+  | 'road-curve'
+  | 'road-intersection'
+  | 'traffic-light'
+  | 'stop-sign'
+  | 'speed-sign';
 
 export type SignalType = 'power' | 'rotation' | 'structural';
 export type PortDirection = 'in' | 'out' | 'bi';
@@ -25,8 +33,12 @@ export type ModuleBehavior =
   | { kind: 'switch' }
   | { kind: 'motor'; rpm: number; torque: number }
   | { kind: 'transmission'; ratio: number; efficiency: number }
+  | { kind: 'pass-rotation'; efficiency: number }
+  | { kind: 'wheel' }
   | { kind: 'vehicle'; vehicleSpeed: number }
-  | { kind: 'track' };
+  | { kind: 'track' }
+  | { kind: 'traffic-light' }
+  | { kind: 'road-sign'; rule: 'stop' | 'speed-30' };
 
 export interface ModuleDefinition {
   type: ModuleType;
@@ -44,6 +56,7 @@ export interface ModuleInstance {
   position: Vector3Tuple;
   rotationY: number;
   switchOn?: boolean;
+  slotKey?: string;
 }
 
 export interface Connection {
