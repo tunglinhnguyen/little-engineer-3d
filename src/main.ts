@@ -509,7 +509,29 @@ recordHistory();
 refresh();
 workbench.focusAll();
 
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+if (new URLSearchParams(location.search).has('qa')) {
+  (window as any).__CAR_LAB__ = {
+    snapshot() {
+      const current = status();
+      return {
+        modules: [...graph.modules.values()],
+        connections: [...graph.connections.values()],
+        ready: current.ready,
+        rpm: Object.fromEntries(current.state.rpm),
+        carId: current.car?.id ?? null,
+      };
+    },
+    rendered(id: string) {
+      return workbench.renderedTransform(id);
+    },
+  };
+}
+
+if (
+  'serviceWorker' in navigator &&
+  !new URLSearchParams(location.search).has('qa') &&
+  (location.protocol === 'https:' || location.hostname === 'localhost')
+) {
   addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register('./sw.js?v=20260930-car1', {
