@@ -194,6 +194,21 @@ export class ConnectionGraph {
     return best;
   }
 
+  previewSnapPose(id: string, maxDistance = 1.45) {
+    const best = this.snapCandidate(id, maxDistance);
+    return best
+      ? {
+          position: [...best.position] as Vector3Tuple,
+          rotationY: best.rotationY,
+          otherModuleId: best.other.id,
+          movingPortId: best.movingPort.id,
+          otherPortId: best.otherPort.id,
+          signal: best.movingPort.signal,
+          distance: best.distance,
+        }
+      : null;
+  }
+
   attachModuleToTarget(id: string, targetId: string) {
     const moving = this.modules.get(id);
     const target = this.modules.get(targetId);
@@ -323,7 +338,11 @@ export class ConnectionGraph {
           Number(module.position[2]) || 0,
         ],
         rotationY: Number.isFinite(module.rotationY) ? module.rotationY : 0,
-        switchOn: module.type === 'switch' ? module.switchOn !== false : undefined,
+        switchOn:
+          module.type === 'switch' || module.type === 'traffic-light'
+            ? module.switchOn !== false
+            : undefined,
+        slotKey: typeof module.slotKey === 'string' ? module.slotKey : undefined,
       });
     }
 
