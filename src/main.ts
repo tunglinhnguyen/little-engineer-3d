@@ -456,7 +456,7 @@ function renderSelection(id: string | null) {
 
 function applySimulation() {
   const s = simulator.evaluate();
-  workbench.setSimulation(true, s.rpm, s.active, s.fluid);
+  workbench.setSimulation(true, s.rpm, s.active);
   renderCoach();
   renderSelection(workbench.selectedId);
 }
@@ -473,7 +473,7 @@ function setMode(next: 'build' | 'run') {
     workbench.focusAll();
   } else {
     mode = 'build';
-    workbench.setSimulation(false, new Map(), new Set(), new Set());
+    workbench.setSimulation(false, new Map(), new Set());
   }
   refresh();
 }
