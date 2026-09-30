@@ -66,6 +66,12 @@ async function assembleManually(page: Page) {
   await spawnAllInArbitraryOrder(page);
 
   await dragModuleToSnap(page, 'car-base');
+  const chassisId = await moduleId(page, 'car-base');
+  if (!(await qa<boolean>(page, 'isInstalled', chassisId))) {
+    const state = await snapshot(page);
+    const chassis = state.modules.find((item: any) => item.id === chassisId);
+    throw new Error('Chassis did not snap. Position=' + JSON.stringify(chassis?.position));
+  }
 
   // Intentionally install in a non-sequential order.
   for (const type of ['differential', 'battery', 'motor', 'switch', 'gearbox']) {
