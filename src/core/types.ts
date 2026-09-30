@@ -34,6 +34,7 @@ export type ModuleBehavior =
   | { kind: 'motor'; rpm: number; torque: number }
   | { kind: 'transmission'; ratio: number; efficiency: number }
   | { kind: 'pass-rotation'; efficiency: number }
+  | { kind: 'passive' }
   | { kind: 'wheel' }
   | { kind: 'vehicle'; vehicleSpeed: number }
   | { kind: 'track' }
