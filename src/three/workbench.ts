@@ -527,6 +527,26 @@ export class Workbench {
     this.ray.setFromCamera(this.pointer, this.camera);
   }
 
+  private poweredAssembly(startId: string) {
+    const seen = new Set<string>([startId]);
+    const queue = [startId];
+
+    while (queue.length) {
+      const id = queue.shift()!;
+      const edges = [...this.graph.incoming(id), ...this.graph.outgoing(id)];
+
+      for (const edge of edges) {
+        if (edge.signal !== 'power' && edge.signal !== 'rotation') continue;
+        const otherId = edge.fromModuleId === id ? edge.toModuleId : edge.fromModuleId;
+        if (seen.has(otherId)) continue;
+        seen.add(otherId);
+        queue.push(otherId);
+      }
+    }
+
+    return seen;
+  }
+
   private nearestRouteT(curve: THREE.CatmullRomCurve3, position: THREE.Vector3) {
     let bestT = 0;
     let bestDistance = Infinity;
@@ -593,11 +613,23 @@ export class Workbench {
         if (reverse) tangent.multiplyScalar(-1);
 
         const yaw = Math.atan2(-tangent.z, tangent.x);
-        const object = this.objects.get(id);
-        if (!object) continue;
+        const assembly = this.poweredAssembly(id);
+        const base = new THREE.Vector3(...module.position);
+        const deltaYaw = yaw - module.rotationY;
+        const rotation = new THREE.Matrix4().makeRotationY(deltaYaw);
 
-        object.position.copy(target);
-        object.rotation.y = yaw;
+        for (const partId of assembly) {
+          const model = this.graph.modules.get(partId);
+          const object = this.objects.get(partId);
+          if (!model || !object) continue;
+
+          const offset = new THREE.Vector3(...model.position)
+            .sub(base)
+            .applyMatrix4(rotation);
+
+          object.position.copy(target).add(offset);
+          object.rotation.y = model.rotationY + deltaYaw;
+        }
       }
     }
 
