@@ -175,6 +175,16 @@ function mountPad(
 
 function car(group: THREE.Group) {
   // Open technical chassis so the child can see where every part belongs.
+  // An invisible hit surface covers the open center, making the frame easy
+  // to grab with a finger instead of requiring a precise tap on a thin rail.
+  const hitSurface = new THREE.Mesh(
+    new THREE.BoxGeometry(3.25,.08,1.78),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  hitSurface.position.y = .02;
+  hitSurface.userData.hitArea = true;
+  group.add(hitSurface);
+
   box(group,[3.25,.18,1.78],0x244c67,[0,-.24,0],.24,.52);
   box(group,[3.05,.16,.16],0x2f6f94,[0,-.04,.73],.22,.48);
   box(group,[3.05,.16,.16],0x2f6f94,[0,-.04,-.73],.22,.48);
