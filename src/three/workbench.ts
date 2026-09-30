@@ -233,6 +233,34 @@ export class Workbench {
   screenPointForModule(id: string) {
     const object = this.objects.get(id);
     if (!object) return null;
+
+    // Find a point that is actually visible for this module. This matters for
+    // open-frame objects such as the chassis: their origin may project through
+    // an empty center or behind another loose part.
+    const candidates: THREE.Vector3[] = [];
+    object.updateWorldMatrix(true, true);
+    object.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || child.userData.isPortVisual || !mesh.visible) return;
+      const geometry = mesh.geometry;
+      if (!geometry.boundingBox) geometry.computeBoundingBox();
+      if (!geometry.boundingBox) return;
+      const localCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
+      candidates.push(mesh.localToWorld(localCenter));
+    });
+    candidates.push(object.getWorldPosition(new THREE.Vector3()));
+
+    const rect = this.canvas.getBoundingClientRect();
+    for (const world of candidates) {
+      const projected = world.clone().project(this.camera);
+      const x = rect.left + (projected.x + 1) * .5 * rect.width;
+      const y = rect.top + (1 - (projected.y + 1) * .5) * rect.height;
+      this.pointer.set(projected.x, projected.y);
+      this.ray.setFromCamera(this.pointer, this.camera);
+      const hit = this.ray.intersectObjects([...this.objects.values()], true)[0];
+      if (hit?.object.userData.moduleId === id) return { x, y };
+    }
+
     return this.screenPointForWorld(object.position.toArray() as Vector3Tuple);
   }
 
