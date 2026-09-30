@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { CAR_PALETTE, ROAD_PALETTE, MODULES } from '../../src/core/moduleRegistry';
 import { curvedCar, mountedCar, part } from '../fixtures';
-import { add, CHASSIS_HEIGHT, rotateY } from '../../src/core/layout';
-import { commitPlacement, slotPose } from '../../src/core/assembly';
+import { CHASSIS_HEIGHT } from '../../src/core/layout';
+import { commitPlacement } from '../../src/core/assembly';
 import type { ModuleType, Placement, Vector3Tuple } from '../../src/core/types';
 
 type Point={x:number;y:number};
@@ -15,13 +15,20 @@ async function spawn(page:Page,type:ModuleType){
  await page.locator('.part[data-type="'+type+'"]').scrollIntoViewIfNeeded();await page.locator('.part[data-type="'+type+'"]').click();
  return (await snapshot(page)).modules.filter((m:any)=>m.type===type).at(-1)?.id as string;
 }
-async function drag(page:Page,id:string,position:Vector3Tuple,hold=0){
+async function select(page:Page,id:string){await qa(page,'focus',id);const point=await qa<Point>(page,'screen',id);expect(point).not.toBeNull();await page.mouse.click(point.x,point.y);const m=(await snapshot(page)).modules.find((m:any)=>m.id===id);await expect(page.locator('#selectedName')).toHaveText(MODULES[m.type as ModuleType].name);}
+async function detach(page:Page,id:string){
+ await select(page,id);await page.locator('#detachPart').click();
+ const staged=await page.evaluate(id=>{const lab=(window as any).__CAR_LAB__,modules=lab.snapshot().modules,members=[id,...modules.filter((m:any)=>m.parentId===id).map((m:any)=>m.id)],bounds=members.map((key:string)=>lab.bounds(key));return {min:[0,1,2].map(i=>Math.min(...bounds.map((b:any)=>b.min[i]))),max:[0,1,2].map(i=>Math.max(...bounds.map((b:any)=>b.max[i]))),others:modules.filter((m:any)=>!members.includes(m.id)).map((m:any)=>lab.bounds(m.id))};},id);
+ expect(staged.min[1]).toBeCloseTo(0,5);for(const other of staged.others)expect([0,1,2].every(i=>staged.min[i]<other.max[i]&&staged.max[i]>other.min[i]),'Detached group does not overlap another module').toBe(false);
+}
+async function armRoad(page:Page,id:string){await select(page,id);await page.locator('#movePart').click();}
+async function drag(page:Page,id:string,position:Vector3Tuple,rootId=id){
  await page.locator('#focusAll').click();
  let start=await qa<Point|null>(page,'screen',id);
  if(!start){await qa(page,'focus',id);start=await qa<Point|null>(page,'screen',id);}
  expect(start,'A visible point on '+id).not.toBeNull();
- const target=await qa<Point>(page,'dragTarget',id,position,start!);
- await page.mouse.move(start!.x,start!.y);await page.mouse.down();if(hold)await page.waitForTimeout(hold);
+ const target=await qa<Point>(page,'dragTarget',rootId,position,start!);
+ await page.mouse.move(start!.x,start!.y);await page.mouse.down();
  await page.mouse.move(target.x,target.y,{steps:3});await page.mouse.up();
 }
 async function install(page:Page,type:ModuleType,key?:string){
@@ -55,24 +62,28 @@ test('manual assembly: wrong place stays loose; all 12 parts install on the benc
  await page.locator('#focusAll').click();await shot(page,'01-manual-bench-assembly');
 });
 
-test('each chassis component: far drop is loose, correct drag attaches, quick swipe is safe, deliberate hold detaches and reattaches',async({page})=>{
- await spawn(page,'car-base');
+test('each chassis component: tap selects; short and long drags carry the whole car; only the detach button separates it; reassembly works',async({page})=>{
  for(const type of CAR_PALETTE.filter(t=>!['car-base','wheel'].includes(t))){
-  const id=await spawn(page,type);await drag(page,id,[-7,1,-4]);expect(await qa(page,'isInstalled',id)).toBe(false);
-  await install(page,type);await qa(page,'focus',id);const start=await qa<Point>(page,'screen',id);expect(start).not.toBeNull();
-  const before=await qa(page,'rendered',id);await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(start.x+55,start.y+20);await page.mouse.up();expect(await qa(page,'rendered',id)).toEqual(before);
-  await drag(page,id,[-7,1,-4],560);expect(await qa(page,'isInstalled',id)).toBe(false);await install(page,type);expect(await qa(page,'isInstalled',id)).toBe(true);
+  await fixture(page,mountedCar());const before=await snapshot(page);await select(page,type);expect((await snapshot(page)).modules).toEqual(before.modules);
+  await drag(page,type,[2,CHASSIS_HEIGHT,-2],'car');let moved=await snapshot(page);expect(moved.count).toBe(12);
+  for(const m of moved.modules){const previous=before.modules.find((n:any)=>n.id===m.id);expect(m.parentId).toBe(previous.parentId);expect(m.slotKey).toBe(previous.slotKey);expect(m.position[0]-previous.position[0]).toBeCloseTo(2);expect(m.position[2]-previous.position[2]).toBeCloseTo(-2);}
+  await select(page,type);const start=await qa<Point>(page,'screen',type),target=await qa<Point>(page,'dragTarget','car',[3,CHASSIS_HEIGHT,-1],start);await page.mouse.move(start.x,start.y);await page.mouse.down();await page.waitForTimeout(750);await page.mouse.move(target.x,target.y);await page.mouse.up();
+  moved=await snapshot(page);expect(moved.count).toBe(12);for(const m of moved.modules)expect(await qa(page,'isInstalled',m.id)).toBe(true);
+  const remaining=moved.modules.filter((m:any)=>m.id!==type&&m.parentId!==type);await detach(page,type);const detached=await snapshot(page);expect(await qa(page,'isInstalled',type)).toBe(false);expect(detached.count).toBe(type.endsWith('axle')?9:11);
+  for(const m of remaining)expect(detached.modules.find((n:any)=>n.id===m.id)).toEqual(m);
+  expect((await qa<any>(page,'bounds',type)).min[1]).toBeGreaterThanOrEqual(-.00001);await install(page,type);expect((await snapshot(page)).count).toBe(12);
  }
  await page.locator('#focusAll').click();await shot(page,'02-individual-attachments');
 });
 
 test('subassembly: axle detach carries its two wheels; undo restores all three; drag cancellation rolls back every member',async({page})=>{
  await fixture(page,mountedCar());const before=await snapshot(page);
- await drag(page,'drive-axle',[-4,.2,-4],560);const moved=await snapshot(page);expect(moved.count).toBe(9);
+ await detach(page,'drive-axle');const separated=await snapshot(page);expect(separated.count).toBe(9);await drag(page,'wheel-rr',[-4,.33,-4],'drive-axle');const moved=await snapshot(page);expect(moved.count).toBe(9);expect(moved.modules.find((m:any)=>m.id==='car')).toEqual(before.modules.find((m:any)=>m.id==='car'));
  for(const key of ['wheel-rl','wheel-rr']){const m=moved.modules.find((m:any)=>m.id===key);expect(m.parentId).toBe('drive-axle');expect(await qa(page,'isAttached',key)).toBe(true);}
- await page.locator('#undoBtn').click();expect((await snapshot(page)).count).toBe(12);
- await qa(page,'focus','car');const start=await qa<Point>(page,'screen','car');expect(start).not.toBeNull();
- await page.mouse.move(start.x,start.y);await page.mouse.down();await page.waitForTimeout(560);await page.mouse.move(start.x+90,start.y+40);await qa(page,'cancelDrag');await page.mouse.up();
+ for(const id of ['drive-axle','wheel-rl','wheel-rr'])expect((await qa<any>(page,'bounds',id)).min[1]).toBeGreaterThanOrEqual(-.00001);expect(moved.modules.find((m:any)=>m.id==='drive-axle').position[1]).toBeCloseTo(.33);
+ await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(separated.modules);await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(before.modules);
+ await select(page,'wheel-rr');const start=await qa<Point>(page,'screen','wheel-rr');expect(start).not.toBeNull();
+ await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(start.x+90,start.y+40);await qa(page,'cancelDrag');await page.mouse.up();
  expect((await snapshot(page)).modules).toEqual(before.modules);await shot(page,'03-protected-subassemblies');
 });
 
@@ -87,7 +98,7 @@ test('motor and gears: test at rest, positive/negative circuit, reduction ratio,
 
 test('whole car moves to the road; runs as one assembly; stops in place; no child teleports back; explicit return goes back',async({page})=>{
  await fixture(page,mountedCar(true));await page.locator('#testRoad').click();
- const target=await qa<Placement>(page,'targetPose','car-base');await drag(page,'car',target.position,560);
+ const target=await qa<Placement>(page,'targetPose','car-base');await drag(page,'motor',target.position,'car');
  expect((await snapshot(page)).count).toBe(12);expect((await snapshot(page)).ready).toBe(true);
  await page.locator('#runBtn').click();await page.waitForTimeout(600);const running=await snapshot(page);expect(running.telemetry.speed).toBeGreaterThan(0);
  await page.evaluate(()=>document.getElementById('runBtn')!.addEventListener('click',()=>{const w=window as any;w.__PARK_BEFORE__={car:w.__CAR_LAB__.rendered('car'),motor:w.__CAR_LAB__.rendered('motor')};},{once:true,capture:true}));
@@ -96,7 +107,7 @@ test('whole car moves to the road; runs as one assembly; stops in place; no chil
  await qa(page,'focus','car');await page.locator('#returnCar').click();await page.locator('#focusAll').click();await shot(page,'05-assembled-car-driving');
 });
 
-test('road modules: straight, curve and intersection snap with real drags; rotate loose module; connected road requires hold',async({page})=>{
+test('road modules: straight, curve and intersection snap with real drags; rotate loose module; connected road stays locked until an explicit movement command',async({page})=>{
  const a=await qa<string>(page,'forceRoad','road-straight',[0,0,0],0);
  const b=await spawn(page,'road-curve');await drag(page,b,[0,0,7.2]);
  let s=await snapshot(page);expect(s.connections.some((e:any)=>[e.fromModuleId,e.toModuleId].includes(a)&&[e.fromModuleId,e.toModuleId].includes(b))).toBe(true);
@@ -111,7 +122,7 @@ for(const type of ['traffic-light','stop-sign','speed-sign'] as ModuleType[])tes
  await fixture(page,mountedCar(true,true));const id=await spawn(page,type);const target=await qa<Placement>(page,'targetPose',type);expect(target).not.toBeNull();
  await drag(page,id,target.position);expect(await qa(page,'isAttached',id)).toBe(true);const before=await qa(page,'rendered',id);
  await qa(page,'focus',id);const pt=await qa<Point>(page,'screen',id);await page.mouse.click(pt.x,pt.y);expect(await qa(page,'rendered',id)).toEqual(before);
- await expect(page.locator('#deletePart')).toHaveCount(0);await page.locator('#focusAll').click();await shot(page,'road-control-'+type);
+ await expect(page.locator('#deletePart')).toHaveCount(0);await page.locator('#focusAll').click();await shot(page,'road-control-'+type);const mounted=await snapshot(page);await detach(page,id);expect(await qa(page,'isAttached',id)).toBe(false);for(const m of mounted.modules.filter((m:any)=>m.id!==id))expect((await snapshot(page)).modules.find((n:any)=>n.id===m.id)).toEqual(m);await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(mounted.modules);
 });
 
 test('red light can be changed while driving without resetting car position',async({page})=>{
@@ -134,16 +145,19 @@ for(const viewport of [{width:1180,height:820},{width:1024,height:768},{width:82
  await page.setViewportSize(viewport);await fixture(page,mountedCar());await qa(page,'focus','car');await page.locator('#cameraTop').click();
  const car=await qa<Point|null>(page,'screen','car');expect(car).not.toBeNull();const frame=await page.locator('#world').boundingBox(),palette=await page.locator('.palette').boundingBox();expect(frame!.y+frame!.height).toBeLessThan(palette!.y+2);
  for(const id of ['buildBtn','testBtn','runBtn','carTab','roadTab','focusAll'])await expect(page.locator('#'+id)).toBeVisible();
+ const battery=await qa<Point>(page,'screen','battery');expect(battery).not.toBeNull();await page.mouse.click(battery.x,battery.y);await expect(page.locator('#detachPart')).toBeVisible();expect((await page.locator('#detachPart').boundingBox())!.height).toBeGreaterThanOrEqual(44);
  await shot(page,'ipad-'+viewport.width+'x'+viewport.height);
 });
 
-test('native touch: tap is safe, hold-drag detaches, cancellation restores position',async({page,context})=>{
+test('native touch: taps and small jitter select; long drag moves the whole car; cancellation restores it; explicit detach moves only the loose part',async({page,context})=>{
  await fixture(page,mountedCar());await qa(page,'focus','battery');const start=await qa<Point>(page,'screen','battery');expect(start).not.toBeNull();
  const cdp=await context.newCDPSession(page);const touch=async(type:'touchStart'|'touchEnd'|'touchMove'|'touchCancel',p?:Point)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:p?[{x:p.x,y:p.y,id:1}]:[]});
- const before=await qa(page,'rendered','battery');await touch('touchStart',start);await touch('touchEnd');expect(await qa(page,'rendered','battery')).toEqual(before);
- await touch('touchStart',start);await page.waitForTimeout(560);await touch('touchMove',{x:start.x+80,y:start.y+45});await touch('touchCancel');expect(await qa(page,'rendered','battery')).toEqual(before);
- await qa(page,'focus','battery');const point=await qa<Point>(page,'screen','battery');const target=await qa<Point>(page,'dragTarget','battery',[-4,1,-3],point);
- await touch('touchStart',point);await page.waitForTimeout(560);await touch('touchMove',target);await touch('touchEnd');expect(await qa(page,'isInstalled','battery')).toBe(false);await shot(page,'09-native-touch');
+ const before=await snapshot(page);await touch('touchStart',start);await touch('touchEnd');expect((await snapshot(page)).modules).toEqual(before.modules);await expect(page.locator('#selectedName')).toHaveText(MODULES.battery.name);
+ await touch('touchStart',start);await touch('touchMove',{x:start.x+3,y:start.y+2});await touch('touchEnd');expect((await snapshot(page)).modules).toEqual(before.modules);
+ let target=await qa<Point>(page,'dragTarget','car',[-2,CHASSIS_HEIGHT,-2],start);await touch('touchStart',start);await page.waitForTimeout(900);await touch('touchMove',target);await touch('touchEnd');const moved=await snapshot(page);expect(moved.count).toBe(12);expect(moved.modules.find((m:any)=>m.id==='car').position[0]).toBeCloseTo(-2);
+ await select(page,'battery');let point=await qa<Point>(page,'screen','battery');await touch('touchStart',point);await touch('touchMove',{x:point.x+80,y:point.y+45});await touch('touchCancel');expect((await snapshot(page)).modules).toEqual(moved.modules);
+ await page.locator('#detachPart').click();expect(await qa(page,'isInstalled','battery')).toBe(false);const separated=await snapshot(page);await select(page,'battery');point=await qa<Point>(page,'screen','battery');target=await qa<Point>(page,'dragTarget','battery',[-4,.2,-3],point);
+ await touch('touchStart',point);await touch('touchMove',target);await touch('touchEnd');const loose=await snapshot(page);for(const m of separated.modules.filter((m:any)=>m.id!=='battery'))expect(loose.modules.find((n:any)=>n.id===m.id)).toEqual(m);await install(page,'battery');expect((await snapshot(page)).count).toBe(12);await shot(page,'09-native-touch');
 });
 
  test('driving around a curve: front wheels steer with the turn and rear half-shafts follow distinct wheel speeds',async({page})=>{
@@ -151,13 +165,46 @@ test('native touch: tap is safe, hold-drag detaches, cancellation restores posit
   await expect.poll(async()=>{const s=(await snapshot(page)).telemetry;return s.position[0];},{timeout:20000}).toBeGreaterThan(.9);
   const s=(await snapshot(page)).telemetry;expect(s.steering.left).toBeGreaterThan(.1);expect(s.steering.right).toBeGreaterThan(s.steering.left);expect(s.wheelRpm.rl).toBeGreaterThan(s.wheelRpm.rr);
   const front=await qa<any>(page,'rendered','wheel-fl'),car=await qa<any>(page,'rendered','car');expect(front.rotationY).toBeGreaterThan(car.rotationY);
-  const before=await qa<any[]>(page,'mechanism','drive-axle');await page.waitForTimeout(350);const after=await qa<any[]>(page,'mechanism','drive-axle');
-  const delta=(side:number)=>{const a=after.find(r=>r.side===side),b=before.find(r=>r.side===side);return Math.abs(a.rotation[2]-b.rotation[2]);};expect(delta(1)).toBeGreaterThan(delta(-1));
+  const before=await qa<any[]>(page,'mechanism','drive-axle');
+  await expect.poll(async()=>{const after=await qa<any[]>(page,'mechanism','drive-axle'),delta=(side:number)=>Math.abs(after.find(r=>r.side===side).rotation[2]-before.find(r=>r.side===side).rotation[2]);return delta(-1)>0&&delta(1)>delta(-1);},{timeout:10000}).toBe(true);
   await shot(page,'10-steering-and-differential-rolling');await page.locator('#runBtn').click();expect((await snapshot(page)).count).toBe(12);
  });
 
  test('a mounted roadside sign stands on the ground and follows a deliberately moved road; undo restores both',async({page})=>{
   const road=await qa<string>(page,'forceRoad','road-straight',[0,0,0]),sign=await spawn(page,'stop-sign'),target=await qa<Placement>(page,'targetPose','stop-sign');await drag(page,sign,target.position);expect((await snapshot(page)).modules.find((m:any)=>m.id===sign).position[1]).toBe(0);const before=await snapshot(page);
-  await drag(page,road,[0,0,5],560);const after=await snapshot(page),r=after.modules.find((m:any)=>m.id===road),m=after.modules.find((m:any)=>m.id===sign);expect(r.position[2]).toBeCloseTo(5);expect(m.position[2]).toBeCloseTo(5);expect(await qa(page,'isAttached',sign)).toBe(true);
+  await armRoad(page,road);await drag(page,road,[0,0,5]);const after=await snapshot(page),r=after.modules.find((m:any)=>m.id===road),m=after.modules.find((m:any)=>m.id===sign);expect(r.position[2]).toBeCloseTo(5);expect(m.position[2]).toBeCloseTo(5);expect(await qa(page,'isAttached',sign)).toBe(true);
   await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(before.modules);await shot(page,'11-roadside-group-movement');
  });
+
+ test('whole vehicle: native touch on a wheel moves all 12 parts immediately, preserves joints and can be repeated without a command',async({page,context})=>{
+  await fixture(page,mountedCar());const original=await snapshot(page);
+  const start=await qa<Point>(page,'screen','wheel-rr');expect(start).not.toBeNull();const target=await qa<Point>(page,'dragTarget','car',[-3,.62,-2],start);const cdp=await context.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:start.x,y:start.y,id:1}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:target.x,y:target.y,id:1}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  const moved=await snapshot(page);expect(moved.count).toBe(12);expect(moved.moveIntent).toBeNull();const car=moved.modules.find((m:any)=>m.id==='car');expect(car.position[0]).toBeCloseTo(-3);expect(car.position[2]).toBeCloseTo(-2);
+  for(const m of moved.modules){const before=original.modules.find((n:any)=>n.id===m.id);expect(m.parentId).toBe(before.parentId);expect(m.slotKey).toBe(before.slotKey);expect(m.position[0]-before.position[0]).toBeCloseTo(-3);expect(m.position[2]-before.position[2]).toBeCloseTo(-2);}
+  await page.locator('#focusAll').click();const pt=await qa<Point>(page,'screen','wheel-rr'),next=await qa<Point>(page,'dragTarget','car',[-2,CHASSIS_HEIGHT,-1],pt);expect(next.x).toBeGreaterThan(0);expect(next.x).toBeLessThan(1180);expect(next.y).toBeGreaterThan(70);expect(next.y).toBeLessThan(670);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:pt.x,y:pt.y,id:2}]});await page.waitForTimeout(900);await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:next.x,y:next.y,id:2}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});expect((await snapshot(page)).count).toBe(12);expect((await snapshot(page)).modules.find((m:any)=>m.id==='car').position[0]).toBeCloseTo(-2);
+  await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(moved.modules);await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(original.modules);await shot(page,'12-whole-car-touch-movement');
+ });
+ test('road movement intent: cancel button, another selection, undo and leaving build all clear it safely',async({page})=>{
+  await fixture(page,mountedCar(true,true));const original=await snapshot(page);await armRoad(page,'road-centre');await page.locator('#cancelMove').click();expect((await snapshot(page)).moveIntent).toBeNull();expect((await snapshot(page)).modules).toEqual(original.modules);
+  await armRoad(page,'road-centre');await select(page,'motor');expect((await snapshot(page)).moveIntent).toBeNull();await armRoad(page,'road-centre');await page.locator('#testBtn').click();expect((await snapshot(page)).moveIntent).toBeNull();await expect(page.locator('#movementBar')).toBeHidden();await page.locator('#testBtn').click();
+  const loose=await spawn(page,'stop-sign');await armRoad(page,'road-centre');await page.locator('#undoBtn').click();expect((await snapshot(page)).moveIntent).toBeNull();expect((await snapshot(page)).modules.some((m:any)=>m.id===loose)).toBe(false);await shot(page,'13-explicit-road-movement');
+ });
+
+test('each wheel: dragging carries the car; detach frees only its bearing; undo, redo and reassembly preserve the other 11 parts',async({page})=>{
+ for(const key of ['wheel-fl','wheel-fr','wheel-rl','wheel-rr']){
+  await fixture(page,mountedCar());await drag(page,key,[-2,CHASSIS_HEIGHT,-2],'car');const before=await snapshot(page);expect(before.count).toBe(12);
+  await detach(page,key);const separated=await snapshot(page);expect(separated.count).toBe(11);expect(separated.modules.find((m:any)=>m.id===key).parentId).toBeUndefined();
+  for(const m of before.modules.filter((m:any)=>m.id!==key))expect(separated.modules.find((n:any)=>n.id===m.id)).toEqual(m);
+  const bounds=await qa<any>(page,'bounds',key);expect(bounds.min[1]).toBeCloseTo(0,5);
+  await page.locator('#undoBtn').click();expect((await snapshot(page)).modules).toEqual(before.modules);await page.locator('#redoBtn').click();expect((await snapshot(page)).modules).toEqual(separated.modules);await install(page,'wheel',key);expect((await snapshot(page)).count).toBe(12);
+ }
+ await shot(page,'14-wheel-detach-and-reassembly');
+});
+
+test('selection does not switch power; test and run prevent detachment and dragging; loose parts stay separate on reload',async({page})=>{
+ await fixture(page,mountedCar(false,true));await select(page,'switch');const pt=await qa<Point>(page,'screen','switch');await page.mouse.dblclick(pt.x,pt.y);expect((await snapshot(page)).modules.find((m:any)=>m.id==='switch').switchOn).toBe(false);
+ await detach(page,'battery');await page.reload();await page.waitForFunction(()=>Boolean((window as any).__CAR_LAB__));expect((await snapshot(page)).count).toBe(11);expect(await qa(page,'isInstalled','battery')).toBe(false);await install(page,'battery');
+ await select(page,'switch');await page.locator('#toggleSwitch').click();await page.locator('#testBtn').click();await select(page,'battery');await expect(page.locator('#detachPart')).toHaveCount(0);const before=await snapshot(page);const start=await qa<Point>(page,'screen','battery');await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(start.x+80,start.y+40);await page.mouse.up();expect((await snapshot(page)).modules).toEqual(before.modules);await page.locator('#testBtn').click();
+ await page.locator('#runBtn').click();await select(page,'battery');await expect(page.locator('#detachPart')).toHaveCount(0);await page.locator('#runBtn').click();await select(page,'battery');await expect(page.locator('#detachPart')).toBeVisible();await shot(page,'15-deliberate-detach-controls');
+});

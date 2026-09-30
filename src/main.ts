@@ -2,7 +2,7 @@ import './styles/app.css';
 import { ConnectionGraph } from './core/connectionGraph';
 import { CAR_PALETTE, CONTROL_TYPES, MODULES, ROAD_PALETTE, ROAD_TYPES } from './core/moduleRegistry';
 import { SimulationEngine } from './core/simulation';
-import { assemblyCount, commitPlacement, descendants, first, isInstalled, isMounted, placementCandidates, previewPlacement, reconcileAssembly, REQUIRED_PARTS, restoreAssembly, UNIQUE_CAR } from './core/assembly';
+import { assemblyCount, commitPlacement, descendants, detachAssembly, first, isInstalled, isMounted, placementCandidates, previewPlacement, reconcileAssembly, REQUIRED_PARTS, restoreAssembly, UNIQUE_CAR } from './core/assembly';
 import { CHASSIS_HEIGHT, ROAD_HALF_LENGTH } from './core/layout';
 import { vehicleCanTravel } from './core/vehicleRules';
 import type { ModuleInstance, ModuleType, Placement, Vector3Tuple } from './core/types';
@@ -35,15 +35,17 @@ app.innerHTML=`
   <p id="partDescription"></p><div id="gestureHint" class="gesture-hint"></div><div id="moduleActions" class="module-actions"></div>
  </aside>
  <nav class="camera-bar panel"><button id="cameraIso">Chéo</button><button id="cameraTop">Trên</button><button id="focusAll">Toàn cảnh</button></nav>
+ <nav id="movementBar" class="movement-bar panel hidden" aria-label="Di chuyển đường"><span>Kéo đoạn đường để đặt lại</span><button id="cancelMove">Hủy</button></nav>
  <div id="toast" class="toast hidden" role="status"></div><div id="driveStatus" class="drive-status hidden" role="status"></div>
 </main>
 <section class="palette panel">
- <div class="palette-title"><div class="palette-tabs"><button id="carTab">Linh kiện</button><button id="roadTab">Đường & tín hiệu</button></div><span id="paletteHelp">Chạm để lấy. Kéo để lắp.</span><button id="testRoad">Lấy đường thử</button></div>
+ <div class="palette-title"><div class="palette-tabs"><button id="carTab">Linh kiện</button><button id="roadTab">Đường & tín hiệu</button></div><span id="paletteHelp">Chạm chọn · Kéo cả xe · Bấm Tháo ra</span><button id="testRoad">Lấy đường thử</button></div>
  <div id="parts" class="parts"></div>
 </section>`;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const button=(id:string)=>el<HTMLButtonElement>(id);
 const showToast=(message:string)=>{el('toast').textContent=message;el('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=window.setTimeout(()=>el('toast').classList.add('hidden'),2200);};
+function isMovementLocked(id:string){const m=graph.modules.get(id);return Boolean(m&&(CONTROL_TYPES.has(m.type)&&isMounted(graph,m)||ROAD_TYPES.has(m.type)&&(descendants(graph,id).length>1||graph.incoming(id).length||graph.outgoing(id).length)));}
 function state(){const sim=simulator.evaluate(),car=first(graph,'car-base');return {sim,car,count:assemblyCount(graph),travel:car?vehicleCanTravel(graph,car.id,sim.rpm):{ready:false,message:'Lấy khung xe hoặc bất kỳ linh kiện nào để bắt đầu.',route:[]}};}
 function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(graph.serialize()));}catch{showToast('Bộ nhớ đầy. Bàn lắp vẫn hoạt động trong phiên này.');}}
 function recordHistory(){const s=JSON.stringify(graph.serialize());if(s===history[historyIndex])return;history=history.slice(0,historyIndex+1);history.push(s);if(history.length>60)history.shift();historyIndex=history.length-1;}
@@ -51,17 +53,15 @@ function changed(){reconcileAssembly(graph);if(!restoring)recordHistory();save()
 
 const workbench=new Workbench(el<HTMLCanvasElement>('world'),graph,{
  canEdit:()=>mode==='build',
- requiresHoldToMove:id=>{const m=graph.modules.get(id);return Boolean(m&&(isMounted(graph,m)||m.type==='car-base'&&descendants(graph,id).length>1||ROAD_TYPES.has(m.type)&&(descendants(graph,id).length>1||graph.incoming(id).length||graph.outgoing(id).length)));},
+ isMovementLocked,
  getSnapPose:(id,raw)=>previewPlacement(graph,id,raw),
- onHoldReady:id=>showToast('Đã mở khóa '+MODULES[graph.modules.get(id)!.type].name+'. Giờ kéo để di chuyển.'),
  onDrop:(id,pose)=>{
   const m=graph.modules.get(id);if(!m)return;
   if(ROAD_TYPES.has(m.type)){graph.disconnectModule(id);}
-  if(!pose){const y=m.type==='car-base'?CHASSIS_HEIGHT:restHeight(m.type);workbench.moveAssembly(id,[m.position[0],y,m.position[2]],m.rotationY);}
+  if(!pose){const y=m.type==='car-base'?CHASSIS_HEIGHT:workbench.restingHeight(id);workbench.moveAssembly(id,[m.position[0],y,m.position[2]],m.rotationY);}
   commitPlacement(graph,id,pose);
-  showToast(pose?'Đã khớp '+(pose.label??MODULES[m.type].name)+'.':'Đang ở bàn. Kéo tới hình gợi ý để lắp.');
+  showToast(pose?'Đã khớp '+(pose.label??MODULES[m.type].name)+'.':m.type==='car-base'?'Đã đặt cả xe. Chạm chọn; kéo để di chuyển.':'Đang ở bàn. Kéo tới hình gợi ý để lắp.');
  },
- onDoubleTap:id=>{if(graph.modules.get(id)?.type==='switch'||graph.modules.get(id)?.type==='traffic-light')toggle(id);},
  onSelect:renderSelection,
  onGraphChanged:changed,
  onDriveUpdate:s=>{el('driveStatus').textContent=s.reason+' · '+s.speed.toFixed(2)+' đơn vị/s';},
@@ -99,6 +99,12 @@ function removeSelected(){
  const m=workbench.selectedId?graph.modules.get(workbench.selectedId):undefined;if(!m||mode!=='build'||isMounted(graph,m)||descendants(graph,m.id).length>1)return;
  graph.removeModule(m.id);workbench.rebuildFromGraph(null);changed();workbench.focusAll();
 }
+function detachSelected(){
+ const m=workbench.selectedId?graph.modules.get(workbench.selectedId):undefined;if(!m||mode!=='build'||m.type==='car-base'||!isMounted(graph,m))return;
+ workbench.cancelMovement();const position=workbench.loosePlacement(m.id);if(!position){showToast('Chưa có chỗ trống. Cất bớt linh kiện rời để tháo.');return;}
+ if(!detachAssembly(graph,m.id,position))return;
+ workbench.rebuildFromGraph(m.id);changed();workbench.focusAll();showToast('Đã tháo '+MODULES[m.type].name+' ra bàn. Bấm ↶ để lắp lại.');
+}
 function setMode(next:'build'|'test'|'run'){
  const s=state();
  if(next==='run'&&!s.travel.ready){showToast(s.travel.message);return;}
@@ -112,7 +118,7 @@ function setMode(next:'build'|'test'|'run'){
 }
 function restoreHistory(index:number){
  if(mode!=='build'||index<0||index>=history.length)return;
- restoring=true;graph.restore(JSON.parse(history[index]));restoreAssembly(graph);workbench.rebuildFromGraph(null);historyIndex=index;restoring=false;save();refresh();workbench.focusAll();
+ workbench.cancelMovement();restoring=true;graph.restore(JSON.parse(history[index]));restoreAssembly(graph);workbench.rebuildFromGraph(null);historyIndex=index;restoring=false;save();refresh();workbench.focusAll();
 }
 function renderPalette(){
  const list=paletteMode==='car'?CAR_PALETTE:ROAD_PALETTE;el('parts').innerHTML='';
@@ -126,27 +132,35 @@ function updatePalette(){
  }
  button('carTab').classList.toggle('active',paletteMode==='car');button('roadTab').classList.toggle('active',paletteMode==='road');button('testRoad').disabled=mode!=='build';
 }
+function renderMovementControls(){
+ el('movementBar').classList.toggle('hidden',mode!=='build'||!workbench.movementIntent());
+}
 function renderSelection(id:string|null){
+ renderMovementControls();
  const m=id?graph.modules.get(id):undefined;const panel=el('selectionPanel');panel.classList.toggle('hidden',!m);if(!m)return;
  const installed=isInstalled(graph,m),mounted=isMounted(graph,m);el('selectedName').textContent=MODULES[m.type].name;
  const sim=simulator.evaluate();const details=[installed?'Trên xe':mounted?'Đã ghép':'Đang rời'];
  if(mode!=='build'&&sim.rpm.has(m.id))details.push(Math.abs(sim.rpm.get(m.id)!).toFixed(0)+' rpm');
  el('selectedState').textContent=details.join(' · ');el('partDescription').textContent=MODULES[m.type].description;
- const protectedPart=mounted||m.type==='car-base'&&descendants(graph,m.id).length>1||ROAD_TYPES.has(m.type)&&Boolean(graph.incoming(m.id).length||graph.outgoing(m.id).length);
- el('gestureHint').textContent=mode!=='build'?'Dừng máy trước khi lắp hoặc tháo.':protectedPart?'Giữ 0,5 giây rồi kéo. Chạm và vuốt nhanh sẽ không tháo.':'Kéo tới hình xanh. Chỉ đúng khớp và đủ gần mới ghép.';
+ const protectedPart=isMovementLocked(m.id),intent=workbench.movementIntent(),armed=intent?.id===m.id;
+ el('gestureHint').textContent=mode!=='build'?'Dừng máy trước khi lắp hoặc tháo.':armed?'Kéo đoạn đường rồi thả để đặt. Biển gắn trên đường đi cùng.':installed?m.type==='car-base'?'Kéo ở khung, bánh hoặc bất kỳ bộ phận đã ráp để chuyển cả xe.':'Chạm để chọn. Kéo để chuyển cả xe. Bấm “Tháo ra” mới tách riêng bộ phận.':mounted?CONTROL_TYPES.has(m.type)?'Biển đang gắn trên đường. Bấm “Tháo ra” để lấy xuống bàn.':'Kéo để chuyển cả cụm. Bấm “Tháo ra” mới tách khỏi cụm.':protectedPart?'Đường đang ghép. Bấm “Di chuyển đoạn đường” rồi kéo.':descendants(graph,m.id).length>1?'Kéo để di chuyển cả cụm, giữ nguyên các khớp.':'Kéo tới hình xanh. Chỉ đúng khớp và đủ gần mới ghép.';
  const actions:string[]=[];
  if(m.type==='switch')actions.push(`<button id="toggleSwitch">${m.switchOn?'Tắt công tắc':'Bật công tắc'}</button>`);
  if(m.type==='traffic-light')actions.push(`<button id="toggleLight">${m.switchOn?'Chuyển đỏ':'Chuyển xanh'}</button>`);
+ if(mode==='build'&&mounted&&m.type!=='car-base')actions.push('<button id="detachPart">Tháo ra</button>');
+ if(mode==='build'&&protectedPart&&ROAD_TYPES.has(m.type))actions.push(`<button id="movePart" class="${armed?'active':''}">${armed?'Hủy di chuyển':'Di chuyển đoạn đường'}</button>`);
  actions.push('<button id="focusPart">Nhìn gần</button>');
- if(mode==='build'&&!protectedPart){actions.push('<button id="rotatePart">Xoay 90°</button>');if(descendants(graph,m.id).length===1)actions.push('<button id="deletePart">Cất</button>');}
+ if(mode==='build'&&!mounted&&!protectedPart){actions.push('<button id="rotatePart">Xoay 90°</button>');if(descendants(graph,m.id).length===1)actions.push('<button id="deletePart">Cất</button>');}
  if(m.type==='car-base'&&mode==='build')actions.push('<button id="returnCar">Về đầu đường</button>');
  el('moduleActions').innerHTML=actions.join('');
  if(document.getElementById('toggleSwitch'))button('toggleSwitch').onclick=()=>toggle(m.id);
  if(document.getElementById('toggleLight'))button('toggleLight').onclick=()=>toggle(m.id);
+ if(document.getElementById('detachPart'))button('detachPart').onclick=detachSelected;
+ if(document.getElementById('movePart'))button('movePart').onclick=()=>{if(armed)workbench.cancelMovement();else{workbench.requestMove(m.id);showToast('Kéo đoạn đường rồi thả để đặt.');}};
  button('focusPart').onclick=()=>workbench.focusSelected();
  if(document.getElementById('rotatePart'))button('rotatePart').onclick=rotateSelected;
  if(document.getElementById('deletePart'))button('deletePart').onclick=removeSelected;
- if(document.getElementById('returnCar'))button('returnCar').onclick=()=>{if(!workbench.returnToStart())showToast('Xe chưa chạy. Giữ và kéo xe tới đầu đường trước.');};
+ if(document.getElementById('returnCar'))button('returnCar').onclick=()=>{if(!workbench.returnToStart())showToast('Xe chưa chạy. Kéo ở bất kỳ bộ phận đã ráp để đưa cả xe lên đường.');};
 }
 function refresh(){
  const s=state();el('progressText').textContent=s.count+' / '+REQUIRED_PARTS;
@@ -175,14 +189,15 @@ function testRoad(){
 button('carTab').onclick=()=>{paletteMode='car';renderPalette();};button('roadTab').onclick=()=>{paletteMode='road';renderPalette();};
 button('testRoad').onclick=testRoad;button('buildBtn').onclick=()=>setMode('build');button('runBtn').onclick=()=>setMode(mode==='run'?'build':'run');button('testBtn').onclick=()=>setMode(mode==='test'?'build':'test');
 button('undoBtn').onclick=()=>restoreHistory(historyIndex-1);button('redoBtn').onclick=()=>restoreHistory(historyIndex+1);
-button('resetBtn').onclick=()=>{if(mode!=='build')return;graph.restore({});workbench.rebuildFromGraph(null);changed();workbench.focusAll();};
+button('resetBtn').onclick=()=>{if(mode!=='build')return;workbench.cancelMovement();graph.restore({});workbench.rebuildFromGraph(null);changed();workbench.focusAll();};
+button('cancelMove').onclick=()=>workbench.cancelMovement();
 button('cameraIso').onclick=()=>workbench.setCamera('iso');button('cameraTop').onclick=()=>workbench.setCamera('top');button('focusAll').onclick=()=>workbench.focusAll();
 try{const saved=localStorage.getItem(STORAGE_KEY);if(saved)graph.restore(JSON.parse(saved));}catch{localStorage.removeItem(STORAGE_KEY);}
 restoreAssembly(graph);workbench.rebuildFromGraph(null);recordHistory();renderPalette();refresh();workbench.focusAll();
 
 if(new URLSearchParams(location.search).has('qa')){
  (window as any).__CAR_LAB__={
-  snapshot(){const s=state();return {modules:[...graph.modules.values()].map(m=>({...m,position:[...m.position]})),connections:[...graph.connections.values()],mode,ready:s.travel.ready,count:s.count,rpm:Object.fromEntries(s.sim.rpm),torque:Object.fromEntries(s.sim.torque),current:Object.fromEntries(s.sim.current),powered:[...s.sim.powered],message:s.travel.message,carId:s.car?.id??null,telemetry:workbench.telemetry()};},
+  snapshot(){const s=state();return {modules:[...graph.modules.values()].map(m=>({...m,position:[...m.position]})),connections:[...graph.connections.values()],mode,ready:s.travel.ready,count:s.count,rpm:Object.fromEntries(s.sim.rpm),torque:Object.fromEntries(s.sim.torque),current:Object.fromEntries(s.sim.current),powered:[...s.sim.powered],message:s.travel.message,carId:s.car?.id??null,moveIntent:workbench.movementIntent(),telemetry:workbench.telemetry()};},
   rendered:(id:string)=>workbench.renderedTransform(id),bounds:(id:string)=>workbench.renderedBounds(id),mechanism:(id:string)=>workbench.mechanism(id),
   screen:(id:string)=>workbench.screenPointForModule(id),screenWorld:(p:Vector3Tuple)=>workbench.screenPointForWorld(p),
   dragTarget:(id:string,p:Vector3Tuple,start:{x:number;y:number})=>workbench.screenDragTarget(id,p,start),
@@ -192,7 +207,7 @@ if(new URLSearchParams(location.search).has('qa')){
   spawn(type:ModuleType){spawn(type);return [...graph.modules.values()].filter(m=>m.type===type).at(-1)?.id??null;},
   focus(id:string){workbench.selectById(id);workbench.focusSelected();},
   forceRoad(type:ModuleType,p:Vector3Tuple,yaw=0){const m:ModuleInstance={id:type+'-fixture-'+crypto.randomUUID().slice(0,6),type,position:p,rotationY:yaw};graph.addModule(m);workbench.rebuildFromGraph(null);changed();return m.id;},
-  fixture(data:any){if(mode!=='build')setMode('build');graph.restore(data);restoreAssembly(graph);workbench.rebuildFromGraph(null);changed();workbench.focusAll();},
+  fixture(data:any){if(mode!=='build')setMode('build');workbench.cancelMovement();graph.restore(data);restoreAssembly(graph);workbench.rebuildFromGraph(null);changed();workbench.focusAll();},
   cancelDrag:()=>workbench.cancelDrag(),
  };
 }

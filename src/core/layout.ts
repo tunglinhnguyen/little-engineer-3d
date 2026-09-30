@@ -11,7 +11,6 @@ export const ROAD_HALF_LENGTH = 2.4;
 export const ROAD_WIDTH = 3.3;
 export const CURVE_RADIUS = 4.8;
 export const SNAP_DISTANCE = .38;
-export const HOLD_MS = 500;
 export const LOCAL_SLOTS: Record<string, Vector3Tuple> = {
   battery: [.85,.12,.52],
   switch: [.85,.12,-.52],

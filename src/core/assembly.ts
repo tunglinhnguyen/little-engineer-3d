@@ -55,6 +55,18 @@ export function descendants(g:ConnectionGraph,id:string):string[]{
  return result;
 }
 
+// A mounted car part is a grab surface for its owning assembly, never a loose handle.
+// Stop at the chassis even when the chassis itself is parked on a road.
+export function movementRoot(g:ConnectionGraph,id:string):string {
+ let node=g.modules.get(id);const seen=new Set([id]);
+ while(node&&isCarPart(node)&&node.type!=='car-base'&&isMounted(g,node)){
+  const parent=g.modules.get(node.parentId!);
+  if(!parent||!isCarPart(parent)||seen.has(parent.id))break;
+  seen.add(parent.id);node=parent;
+ }
+ return node?.id??id;
+}
+
 export function placementCandidates(g:ConnectionGraph,id:string):Placement[]{
  const m=g.modules.get(id);if(!m)return [];
  if(m.type==='wheel'){
@@ -120,6 +132,12 @@ export function commitPlacement(g:ConnectionGraph,id:string,pose:Placement|null)
  else {m.parentId=undefined;m.slotKey=undefined;if(m.type==='car-base')moveGroup(g,id,[m.position[0],CHASSIS_HEIGHT,m.position[2]],m.rotationY);}
  if(ROAD_TYPES.has(m.type)&&pose)g.snapModule(id);
  reconcileAssembly(g);
+}
+
+export function detachAssembly(g:ConnectionGraph,id:string,position:Vector3Tuple):boolean {
+ const m=g.modules.get(id);if(!m||m.type==='car-base'||!isMounted(g,m))return false;
+ moveGroup(g,id,position,m.rotationY);m.parentId=undefined;m.slotKey=undefined;
+ reconcileAssembly(g);return true;
 }
 
 export function reconcileAssembly(g:ConnectionGraph){

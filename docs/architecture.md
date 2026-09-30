@@ -11,7 +11,7 @@
 | `worldRoutes.ts` | Shared road centreline geometry, physically connected seams and directed routes |
 | `VehicleDrive` | Tyre circumference speed, route distance, Ackermann steering, differential rolling and roadside controls |
 | `moduleFactory.ts` | Native module shapes, visible rotating groups, shaft axes and readable labels |
-| `Workbench` | Selection, protected hold-drag, cancellation rollback, camera, wires and mechanism animation |
+| `Workbench` | Part selection, assembly dragging, safe staging, road movement intent, cancellation rollback, camera, wires and mechanism animation |
 
 ## Assembly
 
@@ -29,6 +29,10 @@ Stopping commits the currently rendered car and its children back into graph sta
 
 ## Interaction and rendering
 
-Installed parts and connected roads require a 500 ms stationary hold before dragging. Quick swipes cannot detach them. Pointer cancellation, lost capture and window blur restore the whole dragged group. Orbit controls receive gestures when a part is not being dragged. The canvas occupies the area above the palette; overlays and the palette do not count as usable picking points.
+A tap selects the actual hit part; movement starts only after a 7-pixel threshold. `movementRoot` follows valid car-part ownership up to the chassis, stopping before a road. Dragging any mounted car part therefore moves the entire car without a separate command. Wheels on a loose axle move that axle group. Gesture duration never detaches a part, and repeated taps never toggle power.
+
+The explicit **Tháo ra** action stages the selected mounted part on the ground in a vacant area, clears only its own parent/slot, preserves its descendants and reconciles physical connections. Staging uses the rendered bounding box of the complete subassembly and excludes occupied boxes with a margin. Detaching a rear axle keeps its two wheels; detaching one wheel frees only its bearing. History stores detach and subsequent movement separately. Reload preserves loose parts. Build is the only editing mode.
+
+Connected roads and mounted roadside controls remain protected. A road movement command carries its attached controls, never a parked car. Drop, cancellation, another selection, history restoration and leaving build clear this road intent. Pointer cancellation, lost capture and window blur restore every dragged member. Orbit controls receive gestures when a part is not being dragged. The canvas occupies the area above the palette; overlays and the palette do not count as usable picking points.
 
 Build mode redraws on changes; test and run redraw continuously. Mesh and line geometry, materials and label textures are disposed on rebuild. Road curve rendering and route sampling share the same mathematical curve.

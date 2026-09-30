@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ConnectionGraph, normalizeConnection, portsCompatible } from '../src/core/connectionGraph';
 import { CAR_PALETTE, MODULES, ROAD_PALETTE } from '../src/core/moduleRegistry';
-import { assemblyCount, commitPlacement, descendants, isInstalled, isMounted, moveGroup, placementCandidates, previewPlacement, reconcileAssembly, restoreAssembly, roadsidePose, slotPose } from '../src/core/assembly';
+import { assemblyCount, commitPlacement, descendants, detachAssembly, isInstalled, isMounted, movementRoot, moveGroup, placementCandidates, previewPlacement, reconcileAssembly, restoreAssembly, roadsidePose, slotPose } from '../src/core/assembly';
 import { CHASSIS_HEIGHT, ROAD_HEIGHT, SNAP_DISTANCE, WHEEL_RADIUS, WHEELBASE, HALF_TRACK, rotateY } from '../src/core/layout';
 import { SimulationEngine } from '../src/core/simulation';
 import { buildRoute, curvePoint, pointAtDistance, projectPolyline, sampleRoad, worldRoadPort } from '../src/core/worldRoutes';
@@ -14,6 +14,42 @@ import type { ModuleType } from '../src/core/types';
 const p=(t:ModuleType,id:string)=>MODULES[t].ports.find(p=>p.id===id)!;
 const sim=(g:ConnectionGraph)=>new SimulationEngine(g).evaluate();
 const tick=(d:VehicleDrive,seconds:number)=>{for(let i=0;i<Math.ceil(seconds/.02);i++)d.step(.02);return d.snapshot();};
+
+describe('safe assembly movement and deliberate detachment',()=>{
+ it.each([false,true])('every mounted car part resolves to its chassis even when onRoad=%s',onRoad=>{
+  const g=mountedCar(true,onRoad),before=JSON.stringify(g.serialize());
+  for(const m of g.modules.values())expect(movementRoot(g,m.id)).toBe(m.type.startsWith('road-')?m.id:'car');
+  expect(JSON.stringify(g.serialize())).toBe(before);
+ });
+ it('a loose axle with wheels is its own movable group; loose parts and invalid parent poses do not grab the chassis',()=>{
+  const g=mountedCar();detachAssembly(g,'drive-axle',[-4,.33,-4]);
+  expect(movementRoot(g,'wheel-rl')).toBe('drive-axle');expect(movementRoot(g,'wheel-rr')).toBe('drive-axle');expect(movementRoot(g,'drive-axle')).toBe('drive-axle');
+  detachAssembly(g,'battery',[-4,.2,4]);expect(movementRoot(g,'battery')).toBe('battery');
+  g.modules.get('motor')!.position[0]+=2;expect(movementRoot(g,'motor')).toBe('motor');
+ });
+ it('detaching the battery opens the circuit and leaves the other eleven parts in place; invalid detach requests do nothing',()=>{
+  const g=mountedCar(),before=structuredClone(g.serialize());expect(sim(g).rpm.get('motor')).toBe(120);
+  expect(detachAssembly(g,'battery',[-4,.2,-4])).toBe(true);expect(assemblyCount(g)).toBe(11);expect(sim(g).rpm.size).toBe(0);expect(g.modules.get('battery')!.parentId).toBeUndefined();
+  for(const m of before.modules.filter(m=>m.id!=='battery'))expect(g.modules.get(m.id)).toEqual(m);
+  const detached=JSON.stringify(g.serialize());for(const id of ['battery','car','missing'])expect(detachAssembly(g,id,[9,0,9])).toBe(false);expect(JSON.stringify(g.serialize())).toBe(detached);
+ });
+ it('detaching an axle preserves its wheel joints, disconnects its drive and can be mounted again as one group',()=>{
+  const g=mountedCar(),before=structuredClone(g.serialize());expect(detachAssembly(g,'drive-axle',[-4,.33,-4])).toBe(true);expect(assemblyCount(g)).toBe(9);
+  for(const id of ['wheel-rl','wheel-rr']){const m=g.modules.get(id)!;expect(m.parentId).toBe('drive-axle');expect(isMounted(g,m)).toBe(true);expect(sim(g).rpm.has(id)).toBe(false);}
+  for(const m of before.modules.filter(m=>!['drive-axle','wheel-rl','wheel-rr'].includes(m.id)))expect(g.modules.get(m.id)).toEqual(m);
+  commitPlacement(g,'drive-axle',slotPose(g,'car','drive-axle'));expect(assemblyCount(g)).toBe(12);expect(sim(g).rpm.get('wheel-rl')).toBe(20);
+ });
+ it('detaching one wheel frees exactly that bearing without moving its axle or sibling wheel',()=>{
+  const g=mountedCar(),before=structuredClone(g.serialize());detachAssembly(g,'wheel-fl',[-4,.33,-4]);expect(assemblyCount(g)).toBe(11);
+  for(const m of before.modules.filter(m=>m.id!=='wheel-fl'))expect(g.modules.get(m.id)).toEqual(m);
+  expect(placementCandidates(g,'wheel-fl').map(p=>p.slotKey)).toEqual(['wheel-fl']);commitPlacement(g,'wheel-fl',slotPose(g,'front-axle','wheel-fl'));expect(assemblyCount(g)).toBe(12);
+ });
+ it('detaching a roadside control clears its association without disturbing road connections or the parked vehicle',()=>{
+  const g=mountedCar(true,true),road=g.modules.get('road-centre')!,sign=part('sign','stop-sign');g.addModule(sign);commitPlacement(g,'sign',roadsidePose(road,'side:1'));
+  const before=structuredClone(g.serialize());expect(detachAssembly(g,'sign',[5,0,5])).toBe(true);expect(isMounted(g,sign)).toBe(false);
+  for(const m of before.modules.filter(m=>m.id!=='sign'))expect(g.modules.get(m.id)).toEqual(m);expect(g.serialize().connections).toEqual(before.connections);
+ });
+});
 
 describe('connector safety',()=>{
  it.each([

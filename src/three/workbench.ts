@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MODULES, ROAD_TYPES } from '../core/moduleRegistry';
 import { ConnectionGraph } from '../core/connectionGraph';
-import { descendants, first, placementCandidates } from '../core/assembly';
-import { add, angleDelta, HOLD_MS, rotateY } from '../core/layout';
+import { descendants, first, isMounted, movementRoot, placementCandidates } from '../core/assembly';
+import { add, angleDelta, rotateY } from '../core/layout';
 import { VehicleDrive } from '../core/driving';
-import { buildRoute, projectPolyline, roadCenterline } from '../core/worldRoutes';
+import { projectPolyline, roadCenterline } from '../core/worldRoutes';
 import type { ModuleInstance, Placement, SimulationState, Vector3Tuple } from '../core/types';
 import { createModuleObject, disposeObject } from './moduleFactory';
 
@@ -14,17 +14,15 @@ export interface WorkbenchHooks {
  onSelect(id:string|null):void;
  onGraphChanged():void;
  canEdit():boolean;
- requiresHoldToMove(id:string):boolean;
+ isMovementLocked(id:string):boolean;
  getSnapPose(id:string,position:Vector3Tuple):Placement|null;
  onDrop(id:string,pose:Placement|null):void;
- onHoldReady?(id:string):void;
- onDoubleTap?(id:string):void;
  onDriveUpdate?(status:ReturnType<VehicleDrive['snapshot']>):void;
 }
 interface Drag {
  pointer:number;id:string;start:THREE.Vector2;origin:Vector3Tuple;yaw:number;offset:THREE.Vector3;
  originals:Map<string,{position:Vector3Tuple;rotationY:number}>;
- requiresHold:boolean;ready:boolean;cancelled:boolean;changed:boolean;maxDistance:number;pose:Placement|null;
+ changed:boolean;pose:Placement|null;
 }
 const emptyState=():SimulationState=>({powered:new Set(),active:new Set(),rpm:new Map(),voltage:new Map(),current:new Map(),torque:new Map()});
 export class Workbench {
@@ -40,8 +38,7 @@ export class Workbench {
  private pointer=new THREE.Vector2();
  private plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
  private drag:Drag|null=null;
- private holdTimer=0;
- private lastTap={id:'',at:0};
+ private moveIntent:{id:string}|null=null;
  private state=emptyState();
  private mode:'build'|'test'|'run'='build';
  private drive:VehicleDrive|null=null;
@@ -72,12 +69,13 @@ export class Workbench {
  }
  addInstance(m:ModuleInstance){this.graph.addModule(m);this.rebuildFromGraph(m.id);this.hooks.onGraphChanged();}
  rebuildFromGraph(keepSelection:string|null=this.selectedId){
-  this.cancelDrag();
+  this.cancelDrag();this.moveIntent=null;
   for(const o of this.objects.values()){this.scene.remove(o);disposeObject(o);}this.objects.clear();
   for(const m of this.graph.modules.values()){const o=createModuleObject(m);this.objects.set(m.id,o);this.scene.add(o);}
   this.refreshLinks();this.selectById(keepSelection);this.dirty=true;
  }
  selectById(id:string|null){
+  if(this.moveIntent&&id!==this.moveIntent.id)this.moveIntent=null;
   this.selectedId=id&&this.graph.modules.has(id)?id:null;
   for(const [key,obj] of this.objects)obj.traverse(c=>{
    const mat=(c as THREE.Mesh).material;
@@ -86,9 +84,18 @@ export class Workbench {
   this.refreshGuides();this.hooks.onSelect(this.selectedId);this.dirty=true;
  }
  clearSelection(){this.selectById(null);}
+ movementIntent(){return this.moveIntent?{...this.moveIntent}:null;}
+ requestMove(id:string){
+  const module=this.graph.modules.get(id);if(!module||!this.hooks.canEdit()||!ROAD_TYPES.has(module.type))return false;
+  this.cancelDrag();this.moveIntent={id};this.selectById(id);
+  for(const member of descendants(this.graph,id))this.highlight(member,true);
+  return true;
+ }
+ cancelMovement(){this.cancelDrag();this.moveIntent=null;this.selectById(this.selectedId);}
+
  updateState(state:SimulationState){this.state=state;this.dirty=true;}
  setSimulation(mode:'build'|'test'|'run',state:SimulationState){
-  this.cancelDrag();
+  this.cancelMovement();
   if(this.mode==='run'&&mode!=='run')this.commitDrivePosition();
   this.mode=mode;this.state=state;
   if(mode==='run'){
@@ -130,6 +137,26 @@ export class Workbench {
    m.position=add(position,rotateY(local,delta));m.rotationY+=delta;
    const o=this.objects.get(member);o?.position.set(...m.position);if(o)o.rotation.y=m.rotationY;
   }
+ }
+ restingHeight(id:string):number {
+  const root=this.graph.modules.get(id);if(!root)return 0;
+  const box=new THREE.Box3();for(const member of descendants(this.graph,id)){const object=this.objects.get(member);if(object)box.expandByObject(object);}
+  return box.isEmpty()?root.position[1]:root.position[1]-box.min.y;
+ }
+ loosePlacement(id:string):Vector3Tuple|null {
+  const root=this.graph.modules.get(id);if(!root)return null;
+  const members=new Set(descendants(this.graph,id)),box=new THREE.Box3();
+  for(const member of members){const object=this.objects.get(member);if(object)box.expandByObject(object);}
+  if(box.isEmpty())return null;
+  const occupied=[...this.objects].filter(([key])=>!members.has(key)).map(([,object])=>new THREE.Box3().setFromObject(object).expandByScalar(.18));
+  const y=root.position[1]-box.min.y;
+  for(let radius=2.6;radius<60;radius+=1.2)for(let step=0;step<16;step++){
+   const angle=-Math.PI/2+step*Math.PI/8,position:Vector3Tuple=[root.position[0]+Math.cos(angle)*radius,y,root.position[2]+Math.sin(angle)*radius];
+   const candidate=box.clone().translate(new THREE.Vector3(position[0]-root.position[0],y-root.position[1],position[2]-root.position[2]));
+   if(candidate.min.x < -45||candidate.max.x > 45||candidate.min.z < -45||candidate.max.z > 45)continue;
+   if(occupied.every(other=>!candidate.intersectsBox(other)))return position;
+  }
+  return null;
  }
  setCamera(name:'iso'|'top'|'front'|'rear'|'left'|'right'){
   const t=this.controls.target.clone(),d=this.camera.position.distanceTo(t);
@@ -175,7 +202,7 @@ export class Workbench {
   for(const c of [...this.guides.children]){this.guides.remove(c);disposeObject(c);}
   if(!this.selectedId||this.mode!=='build')return;
   const m=this.graph.modules.get(this.selectedId)!;
-  if(m.type==='car-base'||ROAD_TYPES.has(m.type))return;
+  if(m.type==='car-base'||ROAD_TYPES.has(m.type)||isMounted(this.graph,m))return;
   for(const pose of placementCandidates(this.graph,m.id)){
    const ghost=createModuleObject({...m,position:pose.position,rotationY:pose.rotationY});
    ghost.traverse(c=>{const mats=(c as THREE.Mesh).material;if(mats){for(const mat of Array.isArray(mats)?mats:[mats]){mat.transparent=true;mat.opacity=.18;mat.depthWrite=false;if(mat instanceof THREE.MeshStandardMaterial)mat.color.setHex(0x27b990);}}});this.guides.add(ghost);
@@ -210,23 +237,22 @@ export class Workbench {
   this.canvas.addEventListener('pointerdown',e=>{
    if(this.drag){if(this.drag.pointer!==e.pointerId)this.cancelDrag();return;}
    if(e.button!==0)return;
-   const hit=this.cast(e.clientX,e.clientY)[0];const id=hit?.object.userData.moduleId as string|undefined;
-   if(!id){this.clearSelection();return;}
-   // Capture before OrbitControls: a part gesture must never rotate the camera.
-   e.stopImmediatePropagation();e.preventDefault();this.selectById(id);
-   if(!this.hooks.canEdit())return;
+   const hit=this.cast(e.clientX,e.clientY)[0],hitId=hit?.object.userData.moduleId as string|undefined;
+   if(!hitId){this.clearSelection();return;}
+   // A tap selects the actual part. A drag moves its complete physically mounted assembly.
+   const intent=this.moveIntent,belongs=Boolean(intent&&descendants(this.graph,intent.id).includes(hitId));
+   const id=belongs?intent!.id:movementRoot(this.graph,hitId);
+   e.stopImmediatePropagation();e.preventDefault();this.selectById(belongs?intent!.id:hitId);
+   if(!this.hooks.canEdit()||this.hooks.isMovementLocked(id)&&this.moveIntent?.id!==id)return;
    const m=this.graph.modules.get(id)!;this.plane.constant=-m.position[1];const point=new THREE.Vector3();if(!this.ray.ray.intersectPlane(this.plane,point))return;
    const originals=new Map<string,{position:Vector3Tuple;rotationY:number}>();for(const member of descendants(this.graph,id)){const n=this.graph.modules.get(member)!;originals.set(member,{position:[...n.position],rotationY:n.rotationY});}
-   const requiresHold=this.hooks.requiresHoldToMove(id);
-   this.drag={pointer:e.pointerId,id,start:new THREE.Vector2(e.clientX,e.clientY),origin:[...m.position],yaw:m.rotationY,offset:new THREE.Vector3(...m.position).sub(point),originals,requiresHold,ready:!requiresHold,cancelled:false,changed:false,maxDistance:0,pose:null};
+   this.drag={pointer:e.pointerId,id,start:new THREE.Vector2(e.clientX,e.clientY),origin:[...m.position],yaw:m.rotationY,offset:new THREE.Vector3(...m.position).sub(point),originals,changed:false,pose:null};
    this.controls.enabled=false;this.canvas.setPointerCapture(e.pointerId);
-   if(requiresHold)this.holdTimer=window.setTimeout(()=>{if(this.drag?.pointer!==e.pointerId||this.drag.cancelled)return;this.drag.ready=true;this.highlight(id,true);this.hooks.onHoldReady?.(id);},HOLD_MS);
   },{capture:true});
   this.canvas.addEventListener('pointermove',e=>{
    const d=this.drag;if(!d||d.pointer!==e.pointerId)return;e.stopImmediatePropagation();
-   const distance=d.start.distanceTo(new THREE.Vector2(e.clientX,e.clientY));d.maxDistance=Math.max(d.maxDistance,distance);
-   if(!d.ready){if(distance>10){d.cancelled=true;clearTimeout(this.holdTimer);}return;}
-   if(d.cancelled||!d.changed&&distance<7)return;
+   const distance=d.start.distanceTo(new THREE.Vector2(e.clientX,e.clientY));
+   if(!d.changed&&distance<7)return;
    this.updateRay(e.clientX,e.clientY);const p=new THREE.Vector3();if(!this.ray.ray.intersectPlane(this.plane,p))return;p.add(d.offset);
    const raw:Vector3Tuple=[Math.max(-45,Math.min(45,p.x)),d.origin[1],Math.max(-45,Math.min(45,p.z))];
    const pose=this.hooks.getSnapPose(d.id,raw);d.pose=pose;d.changed=true;
@@ -241,7 +267,7 @@ export class Workbench {
   this.canvas.addEventListener('pointerup',e=>{if(this.drag?.pointer===e.pointerId){e.stopImmediatePropagation();this.finishDrag(false);}}, {capture:true});
   this.canvas.addEventListener('pointercancel',e=>{if(this.drag?.pointer===e.pointerId)this.finishDrag(true);});
   this.canvas.addEventListener('lostpointercapture',e=>{if(this.drag?.pointer===e.pointerId)this.finishDrag(true);});
-  addEventListener('blur',()=>this.cancelDrag());
+  addEventListener('blur',()=>this.cancelMovement());
  }
  private tint(mat:THREE.MeshStandardMaterial,color:number,intensity:number){
   if(mat.userData.baseEmission===undefined){mat.userData.baseEmission=mat.emissive.getHex();mat.userData.baseIntensity=mat.emissiveIntensity;}
@@ -250,14 +276,12 @@ export class Workbench {
  private highlight(id:string,on:boolean){const o=this.objects.get(id);o?.traverse(c=>{const m=(c as THREE.Mesh).material;if(m instanceof THREE.MeshStandardMaterial){this.tint(m,on?0x21af89:0x173f4b,on?.22:.06);}});this.dirty=true;}
  cancelDrag(){if(this.drag)this.finishDrag(true);}
  private finishDrag(cancelled:boolean){
-  const d=this.drag;if(!d)return;this.drag=null;clearTimeout(this.holdTimer);this.controls.enabled=true;
+  const d=this.drag;if(!d)return;this.drag=null;this.controls.enabled=true;
+  if(cancelled||d.changed)this.moveIntent=null;
   if(cancelled){for(const [id,original] of d.originals){const m=this.graph.modules.get(id);if(m){m.position=[...original.position];m.rotationY=original.rotationY;}const o=this.objects.get(id);o?.position.set(...original.position);if(o)o.rotation.y=original.rotationY;}}
   else if(d.changed)this.hooks.onDrop(d.id,d.pose);
-  else if(d.maxDistance<7&&!d.cancelled&&!d.requiresHold||d.maxDistance<7&&!d.cancelled&&!d.ready){
-   const now=performance.now();if(this.lastTap.id===d.id&&now-this.lastTap.at<320){this.lastTap={id:'',at:0};this.hooks.onDoubleTap?.(d.id);}else this.lastTap={id:d.id,at:now};
-  }
   this.highlight(d.id,false);if(this.canvas.hasPointerCapture(d.pointer))this.canvas.releasePointerCapture(d.pointer);
-  if(!cancelled&&d.changed)this.hooks.onGraphChanged();this.refreshLinks();this.refreshGuides();this.dirty=true;
+  if(!cancelled&&d.changed)this.hooks.onGraphChanged();this.selectById(this.selectedId);this.refreshLinks();this.dirty=true;
  }
  private loop(now:number){
   requestAnimationFrame(t=>this.loop(t));const dt=Math.max(0,Math.min(.1,(now-this.last)/1000));this.last=now;
