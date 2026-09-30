@@ -206,14 +206,14 @@ function snapPoseFor(id: string, raw: Vector3Tuple): SnapPose | null {
   if (!module || module.type === 'road-straight') return null;
 
   if (module.type === 'car-base') {
-    return distance(raw, CHASSIS_HOME) <= 1.45
+    return distance(raw, CHASSIS_HOME) <= 2.35
       ? { position: [...CHASSIS_HOME], rotationY: CAR_YAW, label: 'Đường thử' }
       : null;
   }
 
   const pose = partSlotPose(module.type);
   if (!pose) return null;
-  return distance(raw, pose.position) <= 1.0 ? pose : null;
+  return distance(raw, pose.position) <= 1.35 ? pose : null;
 }
 
 function isInstalled(module: ModuleInstance | undefined) {
