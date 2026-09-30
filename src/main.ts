@@ -203,7 +203,7 @@ function partSlotPose(type: Exclude<ModuleType, 'road-straight' | 'car-base'>): 
 
 function snapPoseFor(id: string, raw: Vector3Tuple): SnapPose | null {
   const module = graph.modules.get(id);
-  if (!module || module.type === TRACK_TYPE) return null;
+  if (!module || module.type === 'road-straight') return null;
 
   if (module.type === 'car-base') {
     return distance(raw, CHASSIS_HOME) <= 1.45
@@ -217,7 +217,7 @@ function snapPoseFor(id: string, raw: Vector3Tuple): SnapPose | null {
 }
 
 function isInstalled(module: ModuleInstance | undefined) {
-  if (!module || module.type === TRACK_TYPE) return false;
+  if (!module || module.type === 'road-straight') return false;
 
   if (module.type === 'car-base') return isChassisInstalled();
 
