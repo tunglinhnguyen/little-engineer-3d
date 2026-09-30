@@ -68,22 +68,53 @@ function differential(g:THREE.Group){
 }
 
 function axle(g:THREE.Group,drive:boolean){
-  const bar=rotor(cylinder(g,.10,1.82,0x394b55,[0,0,0],'z',.58),'z');
-  box(g,[.52,.34,.46],drive?0xb47731:0x6d818c,[0,0,0],.28,.42);
-  cylinder(g,.17,.16,0xc9d3d8,[0,0,.96],'z',.48);
-  cylinder(g,.17,.16,0xc9d3d8,[0,0,-.96],'z',.48);
-  bar.userData.rotorDirection=1;
+  if(drive){
+    // Rear drive axle: rotating half-shafts and a central final-drive housing.
+    const shaft=rotor(cylinder(g,.09,1.82,0x394b55,[0,0,0],'z',.62),'z');
+    shaft.userData.rotorDirection=1;
+    cylinder(g,.26,.42,0xb47731,[0,0,0],'x',.36);
+    cylinder(g,.17,.16,0xc9d3d8,[0,0,.96],'z',.48);
+    cylinder(g,.17,.16,0xc9d3d8,[0,0,-.96],'z',.48);
+    box(g,[.42,.16,.54],0x596972,[0,-.12,0],.26,.42);
+    return;
+  }
+
+  // Front axle is passive: rigid beam, steering knuckles and tie rod.
+  box(g,[.18,.18,1.78],0x647985,[0,0,0],.34,.48);
+  box(g,[.32,.32,.18],0x87969d,[0,0,.92],.34,.42);
+  box(g,[.32,.32,.18],0x87969d,[0,0,-.92],.34,.42);
+  cylinder(g,.055,1.60,0xb9c5ca,[.18,-.13,0],'z',.48);
+  cylinder(g,.15,.14,0xc9d3d8,[0,0,1.0],'z',.48);
+  cylinder(g,.15,.14,0xc9d3d8,[0,0,-1.0],'z',.48);
 }
 
 function wheel(g:THREE.Group){
   const tire=rotor(cylinder(g,.36,.24,0x23282c,[0,0,0],'z',.05),'z');
-  const hub=cylinder(g,.14,.27,0xc7d1d6,[0,0,0],'z',.48);
-  hub.userData.rotor=true; hub.userData.rotorAxis='z';
-  const rim1=cylinder(g,.23,.03,0x77878f,[0,0,.13],'z',.35);
-  const rim2=cylinder(g,.23,.03,0x77878f,[0,0,-.13],'z',.35);
-  rim1.userData.rotor=true; rim1.userData.rotorAxis='z';
-  rim2.userData.rotor=true; rim2.userData.rotorAxis='z';
   tire.userData.rotorDirection=1;
+
+  const hub=rotor(cylinder(g,.14,.27,0xc7d1d6,[0,0,0],'z',.48),'z');
+  hub.userData.rotorDirection=1;
+
+  const rim1=rotor(cylinder(g,.23,.03,0x77878f,[0,0,.13],'z',.35),'z');
+  const rim2=rotor(cylinder(g,.23,.03,0x77878f,[0,0,-.13],'z',.35),'z');
+
+  // Five simple spokes make rotation visually obvious to a child.
+  for(let i=0;i<5;i++){
+    const angle=i*Math.PI*2/5;
+    const spoke=box(g,[.035,.17,.025],0xd5dde1,[Math.cos(angle)*.09,Math.sin(angle)*.09,.145],.4,.3);
+    spoke.rotation.z=angle;
+    spoke.userData.rotor=true;
+    spoke.userData.rotorAxis='z';
+  }
+
+  // Small tread blocks give the tire a mechanical rather than toy-cylinder look.
+  for(let i=0;i<10;i++){
+    const angle=i*Math.PI*2/10;
+    const tread=box(g,[.07,.055,.27],0x171b1e,[Math.cos(angle)*.345,Math.sin(angle)*.345,0],.02,.95);
+    tread.rotation.z=angle;
+    tread.userData.rotor=true;
+    tread.userData.rotorAxis='z';
+  }
 }
 
 function mountPad(g:THREE.Group,size:[number,number,number],color:number,position:[number,number,number]){
