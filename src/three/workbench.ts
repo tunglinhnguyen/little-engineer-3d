@@ -672,6 +672,11 @@ export class Workbench {
     let scale = 1;
 
     for (const module of this.graph.modules.values()) {
+      if (
+        (module.type === 'traffic-light' || module.type === 'stop-sign' || module.type === 'speed-sign') &&
+        !module.slotKey?.startsWith('roadside:')
+      ) continue;
+
       const dx = module.position[0] - position.x;
       const dz = module.position[2] - position.z;
       const d = Math.hypot(dx, dz);
