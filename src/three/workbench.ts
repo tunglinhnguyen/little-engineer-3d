@@ -221,6 +221,21 @@ export class Workbench {
     };
   }
 
+  screenPointForWorld(position: Vector3Tuple) {
+    const rect = this.canvas.getBoundingClientRect();
+    const point = new THREE.Vector3(...position).project(this.camera);
+    return {
+      x: rect.left + (point.x + 1) * .5 * rect.width,
+      y: rect.top + (1 - (point.y + 1) * .5) * rect.height,
+    };
+  }
+
+  screenPointForModule(id: string) {
+    const object = this.objects.get(id);
+    if (!object) return null;
+    return this.screenPointForWorld(object.position.toArray() as Vector3Tuple);
+  }
+
   setCamera(name: 'iso' | 'top' | 'front' | 'rear' | 'left' | 'right') {
     const target = this.controls.target.clone();
     const distance = Math.max(10, this.camera.position.distanceTo(target));
