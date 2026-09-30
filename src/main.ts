@@ -37,8 +37,7 @@ const FUNCTION_LINKS: Array<[string,string,string,string]> = [
   ['motor','rotation-out','gearbox','rotation-in'],
   ['gearbox','rotation-out','differential','rotation-in'],
   ['differential','rotation-out','drive-axle','rotation-in'],
-  ['drive-axle','vehicle-out','car-base','vehicle-in'],
-  ['car-base','front-out','front-axle','rotation-in'],
+  ['drive-axle','vehicle-out','car-base','drive-in'],
 ];
 
 const app=document.querySelector<HTMLDivElement>('#app')!;
@@ -154,7 +153,7 @@ function roadForwardYaw(road:ModuleInstance){
 }
 
 function chassisPose(raw:Vector3Tuple):SnapPose|null{
-  const road=nearestRoad(raw,2.25);
+  const road=nearestRoad(raw,1.45);
   if(!road) return null;
   return {position:[road.position[0],.65,road.position[2]],rotationY:roadForwardYaw(road),label:'mặt đường'};
 }
@@ -187,10 +186,10 @@ function carPartSnapPose(module:ModuleInstance,raw:Vector3Tuple):SnapPose|null{
   if(module.type==='car-base') return chassisPose(raw);
   if(module.type==='wheel'){
     const best=freeWheelSlot(raw,module.id);
-    return best&&best.d<1.05?best.pose:null;
+    return best&&best.d<.92?best.pose:null;
   }
   const pose=slotPose(module.type);
-  return pose&&distXZ(raw,pose.position)<1.05?pose:null;
+  return pose&&distXZ(raw,pose.position)<.92?pose:null;
 }
 
 function roadsidePose(raw:Vector3Tuple):SnapPose|null{
@@ -202,13 +201,13 @@ function roadsidePose(raw:Vector3Tuple):SnapPose|null{
     const d=distXZ(raw,p);
     if(d<bestD){bestD=d;best={position:p,rotationY:road.rotationY,label:'lề đường'};}
   }
-  return bestD<1.4?best:null;
+  return bestD<1.05?best:null;
 }
 
 function getSnapPose(id:string,raw:Vector3Tuple):SnapPose|null{
   const module=graph.modules.get(id); if(!module) return null;
   if(ROAD_TYPES.has(module.type)){
-    const preview=graph.previewSnapPose(id,1.35);
+    const preview=graph.previewSnapPose(id,1.0);
     return preview?{position:preview.position,rotationY:preview.rotationY,label:'đầu đường'}:null;
   }
   if(CONTROL_TYPES.has(module.type)) return roadsidePose(raw);
@@ -269,8 +268,13 @@ function ensureFunctionalLinks(){
   for(const [fromType,fromPort,toType,toPort] of FUNCTION_LINKS){
     connectPair(first(fromType as ModuleType),fromPort,first(toType as ModuleType),toPort,'car:'+fromType+'>'+toType);
   }
-  connectPair(first('front-axle'),'wheel-left',bySlot('car:wheel-fl'),'rotation-in','car:front-left');
-  connectPair(first('front-axle'),'wheel-right',bySlot('car:wheel-fr'),'rotation-in','car:front-right');
+
+  // Passive front assembly: mounted to chassis, wheels rotate because the vehicle rolls.
+  connectPair(first('car-base'),'front-mount',first('front-axle'),'mount-in','car:front-mount');
+  connectPair(first('front-axle'),'wheel-left',bySlot('car:wheel-fl'),'mount-in','car:front-left');
+  connectPair(first('front-axle'),'wheel-right',bySlot('car:wheel-fr'),'mount-in','car:front-right');
+
+  // Driven rear assembly: differential -> drive axle -> two rear wheels.
   connectPair(first('drive-axle'),'wheel-left',bySlot('car:wheel-rl'),'rotation-in','car:rear-left');
   connectPair(first('drive-axle'),'wheel-right',bySlot('car:wheel-rr'),'rotation-in','car:rear-right');
 }
@@ -281,11 +285,23 @@ function status(){
   const car=first('car-base');
   const count=installedCarCount();
   const wheels=modulesOf('wheel').filter(m=>isCarInstalled(m));
-  const connected=Boolean(graph.findPathByTypes(['battery','switch','motor','gearbox','differential','drive-axle','car-base','front-axle']));
-  const wheelDrive=wheels.length===4&&wheels.every(w=>state.rpm.has(w.id));
+  const rearLeft=bySlot('car:wheel-rl');
+  const rearRight=bySlot('car:wheel-rr');
+
+  const connected=Boolean(
+    graph.findPathByTypes(['battery','switch','motor','gearbox','differential','drive-axle','car-base'])
+  );
+  const wheelDrive=
+    wheels.length===4 &&
+    Boolean(rearLeft&&rearRight&&state.rpm.has(rearLeft.id)&&state.rpm.has(rearRight.id));
+
   const roadReady=Boolean(car&&vehicleCanTravel(graph,car.id,state.rpm).ready);
   const switchOn=first('switch')?.switchOn!==false;
-  return {state,car,count,connected,wheelDrive,roadReady,switchOn,ready:count===CAR_REQUIRED&&connected&&wheelDrive&&roadReady&&switchOn};
+
+  return {
+    state,car,count,connected,wheelDrive,roadReady,switchOn,
+    ready:count===CAR_REQUIRED&&connected&&wheelDrive&&roadReady&&switchOn,
+  };
 }
 
 function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(graph.serialize()));}
@@ -386,7 +402,7 @@ function renderPalette(){
   const list=paletteMode==='car'?CAR_PALETTE:ROAD_PALETTE;
   paletteTitle.textContent=paletteMode==='car'?'Linh kiện ô tô':'Đường & tín hiệu';
   paletteHelp.textContent=paletteMode==='car'
-    ?'Khung không có bánh/trục. Bánh xe là 4 mô-đun rời; chọn linh kiện theo bất kỳ thứ tự.'
+    ?'Chọn bất kỳ linh kiện nào theo bất kỳ thứ tự. Chạm chỉ lấy linh kiện ra bàn; bé phải tự kéo để lắp.'
     :'Ghép thẳng, góc cua, ngã tư theo ý bé; thêm đèn và biển báo nếu muốn.';
   carTab.classList.toggle('active',paletteMode==='car');roadTab.classList.toggle('active',paletteMode==='road');
 
@@ -419,7 +435,7 @@ function renderCoach(){
   readyBadge.textContent='Chưa sẵn sàng';readyBadge.className='';
   if(![...graph.modules.values()].some(m=>ROAD_TYPES.has(m.type))){coach.textContent='Hãy lấy Đường thẳng, Góc cua hoặc Ngã tư rồi kéo các đầu đường gần nhau để tự ghép.';return;}
   if(!first('car-base')?.slotKey){coach.textContent='Khung xe là khung trần. Kéo khung lên đường; sau đó lắp 2 trục, 4 bánh và các bộ truyền.';return;}
-  if(s.count<CAR_REQUIRED){coach.textContent='Xe còn thiếu bộ phận. Bé có thể chọn bất kỳ linh kiện nào; kéo gần ô lắp trên khung để tự hút.';return;}
+  if(s.count<CAR_REQUIRED){coach.textContent='Bé chọn linh kiện nào cũng được. Kéo bằng tay tới gần đúng ô trên khung; chỉ khi đủ gần hệ thống mới hỗ trợ hút khớp.';return;}
   if(!s.switchOn){coach.textContent='Công tắc đang tắt. Chạm 2 lần Công tắc hoặc dùng nút Bật.';return;}
   coach.textContent='Kiểm tra các khớp truyền động và đường đã nối.';
 }
@@ -433,15 +449,23 @@ function renderSelection(id:string|null){
   if(state.rpm.has(id))detail.push(Math.round(Math.abs(state.rpm.get(id)!))+' rpm');
   selectedState.textContent=detail.join(' · ');
   gestureHint.textContent=attached
-    ?'🔒 Chạm chỉ để chọn. Muốn tháo: giữ khoảng 0,5 giây rồi mới kéo.'
+    ?'🔒 Đã khóa vị trí. Chạm chỉ để chọn; muốn tháo phải giữ khoảng 0,5 giây đến khi sáng xanh, rồi mới kéo.'
     :'☝️ Kéo trực tiếp. Khi tới gần khớp phù hợp, mô-đun sẽ tự căn và hút vào.';
 
   const actions:string[]=[];
   if(m.type==='switch')actions.push(`<button id="toggleSwitch" class="primary">${m.switchOn===false?'⏻ Bật':'⏻ Tắt'}</button>`);
   if(m.type==='traffic-light')actions.push(`<button id="toggleLight" class="primary">${m.switchOn===false?'🟢 Chuyển xanh':'🔴 Chuyển đỏ'}</button>`);
-  if((ROAD_TYPES.has(m.type)||CONTROL_TYPES.has(m.type))&&!attached)actions.push('<button id="rotatePart">↻ Xoay 90°</button>');
+
+  if(!attached&&(ROAD_TYPES.has(m.type)||CONTROL_TYPES.has(m.type))){
+    actions.push('<button id="rotatePart">↻ Xoay 90°</button>');
+  }
+
   actions.push('<button id="focusPart">◎ Nhìn gần</button>');
-  actions.push('<button id="deletePart" class="danger">🗑 Cất</button>');
+
+  // Installed parts are protected from accidental deletion. The child must
+  // deliberately hold and drag the part out first; only loose parts show Cất.
+  if(!attached) actions.push('<button id="deletePart" class="danger">🗑 Cất</button>');
+
   moduleActions.innerHTML=actions.join('');
 
   document.querySelector<HTMLButtonElement>('#toggleSwitch')?.addEventListener('click',()=>workbench.toggleSwitch());
@@ -453,7 +477,7 @@ function renderSelection(id:string|null){
 
 function refresh(){renderPalette();renderSteps();renderCoach();renderSelection(workbench.selectedId);const s=status();runBtn.disabled=mode==='build'&&!s.ready;runBtn.textContent=mode==='run'?'■ Dừng':'▶ Chạy';buildBtn.classList.toggle('active',mode==='build');runBtn.classList.toggle('active',mode==='run');syncHistory();}
 function applySimulation(){const s=simulator.evaluate();workbench.setSimulation(true,s.rpm,s.active);renderCoach();renderSelection(workbench.selectedId);}
-function setMode(next:'build'|'run'){if(next==='run'){if(!status().ready){showToast('Xe chưa đủ 2 trục, 4 bánh, truyền động hoặc đường.');return;}mode='run';applySimulation();workbench.focusAll();}else{mode='build';workbench.setSimulation(false,new Map(),new Set());}refresh();}
+function setMode(next:'build'|'run'){if(next==='run'){if(!status().ready){showToast('Xe chưa đủ linh kiện, khớp truyền động hoặc đường chạy.');return;}mode='run';applySimulation();workbench.focusAll();}else{mode='build';workbench.setSimulation(false,new Map(),new Set());}refresh();}
 
 carTab.onclick=()=>{paletteMode='car';renderPalette();};
 roadTab.onclick=()=>{paletteMode='road';renderPalette();};
