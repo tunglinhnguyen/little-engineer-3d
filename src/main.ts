@@ -2,23 +2,23 @@ import './styles/app.css';
 import { ConnectionGraph, normalizeConnection } from './core/connectionGraph';
 import { MODULES } from './core/moduleRegistry';
 import { SimulationEngine } from './core/simulation';
-import type { ModuleInstance, ModuleType } from './core/types';
+import type { ModuleInstance, ModuleType, Vector3Tuple } from './core/types';
 import { vehicleCanTravel } from './core/vehicleRules';
-import { Workbench } from './three/workbench';
+import { Workbench, type SnapPose } from './three/workbench';
 
-type CarStep = {
-  type: ModuleType;
+type CarPart = {
+  type: Exclude<ModuleType, 'road-straight'>;
   short: string;
   help: string;
 };
 
-const CAR_STEPS: CarStep[] = [
-  { type: 'car-base', short: 'Khung xe', help: 'Nền để lắp các bộ phận.' },
-  { type: 'battery', short: 'Pin', help: 'Cấp điện 6 V.' },
+const CAR_PARTS: CarPart[] = [
+  { type: 'car-base', short: 'Khung xe', help: 'Nền để gắn các bộ phận.' },
+  { type: 'battery', short: 'Pin', help: 'Nguồn điện 6 V.' },
   { type: 'switch', short: 'Công tắc', help: 'Bật hoặc ngắt điện.' },
-  { type: 'motor', short: 'Mô tơ', help: 'Đổi điện thành quay.' },
-  { type: 'gearbox', short: 'Hộp số', help: 'Giảm tốc, tăng lực.' },
-  { type: 'differential', short: 'Vi sai', help: 'Đưa mô-men tới bánh.' },
+  { type: 'motor', short: 'Mô tơ', help: 'Biến điện thành quay.' },
+  { type: 'gearbox', short: 'Hộp số', help: 'Giảm tốc, tăng lực kéo.' },
+  { type: 'differential', short: 'Vi sai', help: 'Truyền mô-men tới bánh.' },
 ];
 
 const FUNCTION_CHAIN: ModuleType[] = [
@@ -39,24 +39,25 @@ const FUNCTION_LINKS: Array<[ModuleType, string, ModuleType, string]> = [
 ];
 
 const TRACK_TYPE: ModuleType = 'road-straight';
-const STORAGE_KEY = 'little-engineer-car-lab-v2';
+const STORAGE_KEY = 'little-engineer-car-lab-v3';
 const CAR_YAW = -Math.PI / 2;
+const CHASSIS_HOME: Vector3Tuple = [.8, .65, -4.9];
 
-const SLOT: Record<Exclude<ModuleType, 'road-straight'>, { position: [number, number, number]; rotationY: number }> = {
-  'car-base': { position: [.8, .65, -4.9], rotationY: CAR_YAW },
-  battery: { position: [.34, 1.02, -4.35], rotationY: CAR_YAW },
-  switch: { position: [1.23, 1.02, -4.35], rotationY: CAR_YAW },
-  motor: { position: [.34, .98, -5.18], rotationY: CAR_YAW },
-  gearbox: { position: [1.23, .98, -5.18], rotationY: CAR_YAW },
-  differential: { position: [.8, .91, -5.95], rotationY: CAR_YAW },
+const STAGING: Record<Exclude<ModuleType, 'road-straight'>, Vector3Tuple> = {
+  'car-base': [-4.1, .65, -5.0],
+  battery: [-5.25, .65, -2.8],
+  switch: [-3.75, .65, -2.8],
+  motor: [-5.25, .65, -4.05],
+  gearbox: [-3.75, .65, -4.05],
+  differential: [-2.35, .65, -3.45],
 };
 
-const STAGING: Record<Exclude<ModuleType, 'road-straight' | 'car-base'>, [number, number, number]> = {
-  battery: [-5.3, .65, -4.6],
-  switch: [-3.8, .65, -4.6],
-  motor: [-5.3, .65, -6.0],
-  gearbox: [-3.8, .65, -6.0],
-  differential: [-2.25, .65, -5.3],
+const LOCAL_SLOTS: Record<Exclude<ModuleType, 'road-straight' | 'car-base'>, Vector3Tuple> = {
+  battery: [.55, .37, .46],
+  switch: [.55, .37, -.43],
+  motor: [-.28, .33, .46],
+  gearbox: [-.28, .33, -.43],
+  differential: [-1.05, .26, 0],
 };
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -68,7 +69,7 @@ app.innerHTML = `
       <span class="brand-icon">🚗</span>
       <div>
         <b>Ô tô Kỹ sư 3D</b>
-        <small>Lắp bộ phận vào đúng vị trí trên khung xe</small>
+        <small>Tự kéo linh kiện vào xe · gần đúng sẽ tự hút khớp</small>
       </div>
     </div>
     <div class="mode-actions">
@@ -82,11 +83,11 @@ app.innerHTML = `
 
   <aside class="build-progress panel">
     <div class="progress-head">
-      <div><small>TIẾN ĐỘ LẮP XE</small><b id="progressText">0 / 6</b></div>
+      <div><small>ĐÃ LẮP ĐÚNG VỊ TRÍ</small><b id="progressText">0 / 6</b></div>
       <span id="readyBadge">Chưa sẵn sàng</span>
     </div>
     <div id="stepList" class="step-list"></div>
-    <div id="coach" class="coach">Bước 1: đặt Khung xe lên đường thử.</div>
+    <div id="coach" class="coach">Chọn linh kiện bất kỳ. Kéo Khung xe vào đường thử rồi kéo các bộ phận lên khung.</div>
   </aside>
 
   <aside id="selectionPanel" class="selection-panel panel hidden">
@@ -94,6 +95,7 @@ app.innerHTML = `
       <span id="selectedIcon">⚙️</span>
       <div><b id="selectedName">Mô-đun</b><small id="selectedState"></small></div>
     </div>
+    <div id="gestureHint" class="gesture-hint"></div>
     <div id="moduleActions" class="module-actions"></div>
   </aside>
 
@@ -105,7 +107,10 @@ app.innerHTML = `
 
   <section class="palette panel">
     <div class="palette-title">
-      <div><b>6 bộ phận của ô tô</b><small>Lắp từ 1 → 6; các bộ phận sẽ vào đúng vị trí trên khung</small></div>
+      <div>
+        <b>Kho linh kiện ô tô</b>
+        <small>Chọn bất kỳ thứ tự nào · chạm để lấy ra, sau đó kéo bằng tay để lắp</small>
+      </div>
       <div class="palette-legend"><span class="dot power"></span>Điện <span class="dot rotation"></span>Truyền động</div>
     </div>
     <div id="parts" class="parts"></div>
@@ -129,6 +134,7 @@ const selectionPanel = document.querySelector<HTMLElement>('#selectionPanel')!;
 const selectedIcon = document.querySelector<HTMLElement>('#selectedIcon')!;
 const selectedName = document.querySelector<HTMLElement>('#selectedName')!;
 const selectedState = document.querySelector<HTMLElement>('#selectedState')!;
+const gestureHint = document.querySelector<HTMLElement>('#gestureHint')!;
 const moduleActions = document.querySelector<HTMLDivElement>('#moduleActions')!;
 const toast = document.querySelector<HTMLElement>('#toast')!;
 
@@ -147,6 +153,20 @@ function showToast(message: string) {
   toastTimer = window.setTimeout(() => toast.classList.add('hidden'), 1800);
 }
 
+function rotateOffset(local: Vector3Tuple, yaw: number): Vector3Tuple {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return [
+    local[0] * c + local[2] * s,
+    local[1],
+    -local[0] * s + local[2] * c,
+  ];
+}
+
+function distance(a: Vector3Tuple, b: Vector3Tuple) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
 function carModule(type: ModuleType) {
   return [...graph.modules.values()].find(module => module.type === type);
 }
@@ -155,14 +175,58 @@ function isTrack(id: string) {
   return graph.modules.get(id)?.type === TRACK_TYPE;
 }
 
-function isAtSlot(module: ModuleInstance | undefined) {
-  if (!module || module.type === 'road-straight') return false;
-  const slot = SLOT[module.type];
-  return Math.hypot(
-    module.position[0] - slot.position[0],
-    module.position[1] - slot.position[1],
-    module.position[2] - slot.position[2],
-  ) < .08;
+function isChassisInstalled() {
+  const chassis = carModule('car-base');
+  return Boolean(
+    chassis &&
+    distance(chassis.position, CHASSIS_HOME) < .12 &&
+    Math.abs(chassis.rotationY - CAR_YAW) < .08
+  );
+}
+
+function partSlotPose(type: Exclude<ModuleType, 'road-straight' | 'car-base'>): SnapPose | null {
+  const chassis = carModule('car-base');
+  if (!chassis || !isChassisInstalled()) return null;
+
+  const local = LOCAL_SLOTS[type];
+  const rotated = rotateOffset(local, chassis.rotationY);
+  return {
+    position: [
+      chassis.position[0] + rotated[0],
+      chassis.position[1] + rotated[1],
+      chassis.position[2] + rotated[2],
+    ],
+    rotationY: chassis.rotationY,
+    label: MODULES[type].name,
+  };
+}
+
+function snapPoseFor(id: string, raw: Vector3Tuple): SnapPose | null {
+  const module = graph.modules.get(id);
+  if (!module || module.type === TRACK_TYPE) return null;
+
+  if (module.type === 'car-base') {
+    return distance(raw, CHASSIS_HOME) <= 1.45
+      ? { position: [...CHASSIS_HOME], rotationY: CAR_YAW, label: 'Đường thử' }
+      : null;
+  }
+
+  const pose = partSlotPose(module.type);
+  if (!pose) return null;
+  return distance(raw, pose.position) <= 1.0 ? pose : null;
+}
+
+function isInstalled(module: ModuleInstance | undefined) {
+  if (!module || module.type === TRACK_TYPE) return false;
+
+  if (module.type === 'car-base') return isChassisInstalled();
+
+  const pose = partSlotPose(module.type);
+  return Boolean(
+    pose &&
+    distance(module.position, pose.position) < .1 &&
+    Math.abs(module.rotationY - pose.rotationY) < .08
+  );
 }
 
 function freshTrack() {
@@ -207,7 +271,7 @@ function ensureFunctionalLinks() {
   for (const [fromType, fromPortId, toType, toPortId] of FUNCTION_LINKS) {
     const from = carModule(fromType);
     const to = carModule(toType);
-    if (!from || !to || !isAtSlot(from) || !isAtSlot(to)) continue;
+    if (!from || !to || !isInstalled(from) || !isInstalled(to)) continue;
 
     const already = [...graph.connections.values()].some(connection =>
       connection.fromModuleId === from.id &&
@@ -236,7 +300,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as { modules?: ModuleInstance[]; connections?: any[] };
-      const allowed = new Set<ModuleType>([...CAR_STEPS.map(step => step.type), TRACK_TYPE]);
+      const allowed = new Set<ModuleType>([...CAR_PARTS.map(part => part.type), TRACK_TYPE]);
       const modules = (parsed.modules ?? []).filter(module => allowed.has(module.type));
       const ids = new Set(modules.map(module => module.id));
       const connections = (parsed.connections ?? []).filter(
@@ -289,44 +353,12 @@ function restoreHistory(index: number) {
   workbench.focusAll();
 }
 
-function commitGraphChange(selectId: string | null = null) {
-  ensureFunctionalLinks();
-  workbench.rebuildFromGraph();
-  if (selectId) workbench.selectById(selectId);
-  if (!restoring) recordHistory();
-  saveQuietly();
-  refresh();
-}
-
-const workbench = new Workbench(canvas, graph, {
-  canEdit: () => mode === 'build',
-  canMove: () => false,
-  onSelect: renderSelection,
-  onGraphChanged: () => {
-    if (!restoring) recordHistory();
-    saveQuietly();
-    refresh();
-    if (mode === 'run') applySimulation();
-  },
-});
-
-function stepDone(index: number) {
-  const module = carModule(CAR_STEPS[index].type);
-  return Boolean(module && isAtSlot(module));
-}
-
-function nextRequiredIndex() {
-  for (let index = 0; index < CAR_STEPS.length; index++) {
-    if (!stepDone(index)) return index;
-  }
-  return -1;
-}
-
 function status() {
   const state = simulator.evaluate();
   const car = carModule('car-base');
   const switchModule = carModule('switch');
-  const allInstalled = CAR_STEPS.every((_, index) => stepDone(index));
+  const installedCount = CAR_PARTS.filter(part => isInstalled(carModule(part.type))).length;
+  const allInstalled = installedCount === CAR_PARTS.length;
   const connected = Boolean(graph.findPathByTypes(FUNCTION_CHAIN));
   const poweredCar = Boolean(car && state.rpm.has(car.id));
   const roadReady = Boolean(car && vehicleCanTravel(graph, car.id, state.rpm).ready);
@@ -335,6 +367,7 @@ function status() {
   return {
     state,
     car,
+    installedCount,
     allInstalled,
     connected,
     poweredCar,
@@ -344,116 +377,111 @@ function status() {
   };
 }
 
-function addCarPart(type: ModuleType) {
+const workbench = new Workbench(canvas, graph, {
+  canEdit: () => mode === 'build',
+  canMove: id => !isTrack(id),
+  requiresHoldToMove: id => isInstalled(graph.modules.get(id)),
+  getSnapPose: (id, raw) => snapPoseFor(id, raw),
+  onHoldReady: id => {
+    const module = graph.modules.get(id);
+    if (!module) return;
+    showToast('Giữ đủ rồi — kéo ' + MODULES[module.type].name + ' để tháo.');
+  },
+  onDrop: (id, snapped) => {
+    const module = graph.modules.get(id);
+    if (!module) return;
+
+    if (snapped) {
+      ensureFunctionalLinks();
+      showToast('🧲 ' + MODULES[module.type].name + ' đã khớp đúng vị trí.');
+    } else {
+      showToast(MODULES[module.type].name + ' đang ở trạng thái rời.');
+    }
+  },
+  onSelect: renderSelection,
+  onGraphChanged: () => {
+    ensureFunctionalLinks();
+    if (!restoring) recordHistory();
+    saveQuietly();
+    refresh();
+    if (mode === 'run') applySimulation();
+  },
+});
+
+function spawnPart(type: Exclude<ModuleType, 'road-straight'>) {
   if (mode === 'run') {
-    showToast('⏹ Dừng xe trước khi sửa.');
+    showToast('⏹ Dừng xe trước khi lắp.');
     return;
   }
 
   const existing = carModule(type);
   if (existing) {
     workbench.selectById(existing.id);
+    workbench.focusSelected();
     return;
   }
 
-  const index = CAR_STEPS.findIndex(step => step.type === type);
-  if (index < 0) return;
-
-  if (index > 0 && !stepDone(index - 1)) {
-    showToast('Lắp ' + CAR_STEPS[index - 1].short + ' trước.');
-    return;
-  }
-
-  const slot = SLOT[type as Exclude<ModuleType, 'road-straight'>];
   const instance: ModuleInstance = {
     id: type + '-' + crypto.randomUUID().slice(0, 8),
     type,
-    position: [...slot.position],
-    rotationY: slot.rotationY,
+    position: [...STAGING[type]],
+    rotationY: 0,
     switchOn: type === 'switch' ? true : undefined,
   };
 
-  graph.addModule(instance);
-  commitGraphChange(instance.id);
-  showToast('✓ ' + CAR_STEPS[index].short + ' đã vào đúng vị trí.');
-
-  if (type === 'car-base' || type === 'differential') {
-    workbench.focusAll();
-  }
-}
-
-function detachModule(id: string) {
-  const module = graph.modules.get(id);
-  if (!module || module.type === 'road-straight' || module.type === 'car-base') return;
-
-  graph.disconnectModule(id);
-  const stage = STAGING[module.type as keyof typeof STAGING];
-  module.position = [...stage];
-  module.rotationY = 0;
-  commitGraphChange(id);
-  showToast('Đã tháo ' + MODULES[module.type].name + ' ra khỏi xe.');
-}
-
-function installModule(id: string) {
-  const module = graph.modules.get(id);
-  if (!module || module.type === 'road-straight') return;
-
-  const slot = SLOT[module.type as Exclude<ModuleType, 'road-straight'>];
-  module.position = [...slot.position];
-  module.rotationY = slot.rotationY;
-  ensureFunctionalLinks();
-  commitGraphChange(id);
-  showToast('🧲 Đã gắn đúng vị trí trên khung xe.');
+  workbench.addInstance(instance);
+  showToast('Đã lấy ' + MODULES[type].name + '. Kéo bằng tay để lắp.');
 }
 
 function deleteModule(id: string) {
   const module = graph.modules.get(id);
-  if (!module || module.type === 'road-straight' || module.type === 'car-base') return;
+  if (!module || module.type === TRACK_TYPE) return;
 
   graph.removeModule(id);
-  commitGraphChange();
-  showToast('Đã xóa ' + MODULES[module.type].name + '.');
+  workbench.rebuildFromGraph();
+  ensureFunctionalLinks();
+  recordHistory();
+  saveQuietly();
+  refresh();
+  showToast('Đã cất ' + MODULES[module.type].name + ' khỏi bàn lắp.');
 }
 
 function renderPalette() {
   parts.innerHTML = '';
-  const next = nextRequiredIndex();
 
-  CAR_STEPS.forEach((step, index) => {
-    const module = carModule(step.type);
-    const installed = Boolean(module && isAtSlot(module));
+  CAR_PARTS.forEach(part => {
+    const module = carModule(part.type);
+    const installed = isInstalled(module);
     const button = document.createElement('button');
+
     button.className =
       'part' +
-      (installed ? ' done' : module ? ' present' : '') +
-      (index === next ? ' next' : '');
+      (installed ? ' done' : module ? ' present' : '');
 
-    button.disabled =
-      mode === 'run' ||
-      (!module && index > 0 && !stepDone(index - 1));
-
+    button.disabled = mode === 'run';
     button.innerHTML = `
-      <span class="step-no">${installed ? '✓' : index + 1}</span>
-      <span class="part-icon">${MODULES[step.type].icon}</span>
-      <b>${step.short}</b>
-      <small>${step.help}</small>
+      <span class="step-no">${installed ? '✓' : module ? '•' : '+'}</span>
+      <span class="part-icon">${MODULES[part.type].icon}</span>
+      <b>${part.short}</b>
+      <small>${installed ? 'Đã lắp' : module ? 'Đang ở bàn lắp' : part.help}</small>
     `;
 
-    button.onclick = () => addCarPart(step.type);
+    button.onclick = () => spawnPart(part.type);
     parts.appendChild(button);
   });
 }
 
 function renderSteps() {
-  stepList.innerHTML = CAR_STEPS.map((step, index) => {
-    const module = carModule(step.type);
-    const installed = Boolean(module && isAtSlot(module));
+  stepList.innerHTML = CAR_PARTS.map(part => {
+    const module = carModule(part.type);
+    const installed = isInstalled(module);
     const cls = installed ? 'done' : module ? 'present' : '';
+    const symbol = installed ? '✓' : module ? '↕' : '○';
 
     return `
       <div class="progress-step ${cls}">
-        <span>${installed ? '✓' : index + 1}</span>
-        <b>${step.short}</b>
+        <span>${symbol}</span>
+        <b>${part.short}</b>
       </div>
     `;
   }).join('');
@@ -461,38 +489,41 @@ function renderSteps() {
 
 function renderCoach() {
   const current = status();
-  const next = nextRequiredIndex();
-  const doneCount = CAR_STEPS.filter((_, index) => stepDone(index)).length;
-  progressText.textContent = doneCount + ' / ' + CAR_STEPS.length;
+  progressText.textContent = current.installedCount + ' / ' + CAR_PARTS.length;
 
   if (current.ready) {
     readyBadge.textContent = mode === 'run' ? 'Đang chạy' : 'Sẵn sàng';
     readyBadge.className = 'ready';
     coach.textContent = mode === 'run'
-      ? '🚗 Cả cụm xe đang chạy cùng nhau: Pin → Công tắc → Mô tơ → Hộp số → Vi sai → bánh xe.'
-      : '✅ Các bộ phận đã nằm đúng trên khung. Bấm “Chạy”.';
+      ? '🚗 Mô tơ, hộp số, vi sai và bánh xe đang hoạt động cùng một cụm.'
+      : '✅ Xe đã lắp đúng. Bấm “Chạy” để thử.';
     return;
   }
 
   readyBadge.textContent = 'Chưa sẵn sàng';
   readyBadge.className = '';
 
-  if (next >= 0) {
-    const step = CAR_STEPS[next];
-    const existing = carModule(step.type);
-    coach.textContent = existing
-      ? '🧲 ' + step.short + ' đang ở ngoài xe. Chọn nó rồi bấm “Gắn vào xe”.'
-      : 'Bước ' + (next + 1) + ': lắp “' + step.short + '”.';
+  if (!carModule('car-base')) {
+    coach.textContent = 'Chọn linh kiện bất kỳ. Khi muốn ráp, lấy Khung xe và kéo nó vào đường thử; gần đúng sẽ tự hút.';
+    return;
+  }
+
+  if (!isChassisInstalled()) {
+    coach.textContent = 'Kéo Khung xe vào giữa đường thử. Khi tới gần đúng vị trí, khung sẽ tự căn thẳng và hút vào.';
+    return;
+  }
+
+  if (!current.allInstalled) {
+    coach.textContent = 'Khung đã sẵn sàng. Chọn bất kỳ linh kiện còn thiếu rồi kéo lên khung; gần đúng vị trí sẽ tự khớp.';
     return;
   }
 
   if (!current.switchOn) {
-    coach.textContent = '⏻ Công tắc đang tắt. Chọn Công tắc rồi bấm “Bật”.';
-  } else if (!current.connected) {
-    coach.textContent = 'Kiểm tra một bộ phận vừa bị tháo khỏi chuỗi truyền động.';
-  } else {
-    coach.textContent = 'Kiểm tra lại vị trí xe trên đường thử.';
+    coach.textContent = '⏻ Mọi thứ đã lắp đúng nhưng Công tắc đang tắt. Chạm Công tắc rồi bật lên.';
+    return;
   }
+
+  coach.textContent = 'Kiểm tra lại một khớp truyền động vừa bị tháo.';
 }
 
 function refresh() {
@@ -528,31 +559,37 @@ function renderSelection(id: string | null) {
 
   if (module.type === TRACK_TYPE) {
     selectedState.textContent = 'Đường thử cố định';
+    gestureHint.textContent = 'Đường không thể kéo nhầm.';
     moduleActions.innerHTML = '<button id="focusTrack">◎ Nhìn toàn xe</button>';
     document.querySelector<HTMLButtonElement>('#focusTrack')!.onclick = () => workbench.focusAll();
     return;
   }
 
-  const installed = isAtSlot(module);
+  const installed = isInstalled(module);
   const state = simulator.evaluate();
-  const details: string[] = [installed ? 'Đã lắp trên xe' : 'Đang tháo rời'];
+  const details: string[] = [installed ? 'Đã khớp trên xe' : 'Linh kiện rời'];
+
   if (state.voltage.has(id)) details.push(state.voltage.get(id)!.toFixed(1) + ' V');
   if (state.rpm.has(id)) details.push(Math.round(Math.abs(state.rpm.get(id)!)) + ' rpm');
   selectedState.textContent = details.join(' · ');
 
-  if (module.type === 'car-base') {
-    moduleActions.innerHTML = '<button id="focusCar" class="primary">◎ Nhìn toàn xe</button>';
-    document.querySelector<HTMLButtonElement>('#focusCar')!.onclick = () => workbench.focusAll();
-    return;
-  }
+  gestureHint.textContent = installed
+    ? '🔒 Đã khóa: chạm chỉ để chọn. Muốn tháo, giữ khoảng 0,5 giây rồi kéo ra.'
+    : module.type === 'car-base'
+      ? '☝️ Kéo khung xe vào đường thử. Gần đúng vị trí sẽ tự hút và căn thẳng.'
+      : isChassisInstalled()
+        ? '☝️ Kéo linh kiện lên khung xe. Gần đúng vị trí sẽ tự hút vào.'
+        : '☝️ Có thể kéo linh kiện tự do. Lắp Khung xe vào đường trước để hiện vị trí hút.';
 
   const toggleAction = module.type === 'switch'
     ? `<button id="togglePart" class="primary">${module.switchOn === false ? '⏻ Bật' : '⏻ Tắt'}</button>`
     : '';
 
-  moduleActions.innerHTML = installed
-    ? `${toggleAction}<button id="detachPart">⤴ Tháo</button><button id="deletePart" class="danger">🗑 Xóa</button>`
-    : `${toggleAction}<button id="installPart" class="primary">🧲 Gắn vào xe</button><button id="deletePart" class="danger">🗑 Xóa</button>`;
+  moduleActions.innerHTML = `
+    ${toggleAction}
+    <button id="focusPart">◎ Nhìn gần</button>
+    <button id="deletePart" class="danger">🗑 Cất linh kiện</button>
+  `;
 
   const toggle = document.querySelector<HTMLButtonElement>('#togglePart');
   if (toggle) {
@@ -562,14 +599,8 @@ function renderSelection(id: string | null) {
     };
   }
 
-  const detach = document.querySelector<HTMLButtonElement>('#detachPart');
-  if (detach) detach.onclick = () => detachModule(id);
-
-  const install = document.querySelector<HTMLButtonElement>('#installPart');
-  if (install) install.onclick = () => installModule(id);
-
-  const remove = document.querySelector<HTMLButtonElement>('#deletePart');
-  if (remove) remove.onclick = () => deleteModule(id);
+  document.querySelector<HTMLButtonElement>('#focusPart')!.onclick = () => workbench.focusSelected();
+  document.querySelector<HTMLButtonElement>('#deletePart')!.onclick = () => deleteModule(id);
 }
 
 function applySimulation() {
@@ -583,7 +614,7 @@ function setMode(next: 'build' | 'run') {
   if (next === 'run') {
     const current = status();
     if (!current.ready) {
-      showToast('Lắp đủ 6 bộ phận đúng vị trí trước.');
+      showToast('Kéo đủ 6 bộ phận vào đúng vị trí trước.');
       return;
     }
 
@@ -635,12 +666,20 @@ if (new URLSearchParams(location.search).has('qa')) {
         modules: [...graph.modules.values()],
         connections: [...graph.connections.values()],
         ready: current.ready,
+        installedCount: current.installedCount,
         rpm: Object.fromEntries(current.state.rpm),
         carId: current.car?.id ?? null,
       };
     },
     rendered(id: string) {
       return workbench.renderedTransform(id);
+    },
+    snapPose(type: Exclude<ModuleType, 'road-straight'>) {
+      if (type === 'car-base') return { position: CHASSIS_HOME, rotationY: CAR_YAW };
+      return partSlotPose(type);
+    },
+    isInstalled(id: string) {
+      return isInstalled(graph.modules.get(id));
     },
   };
 }
@@ -652,13 +691,11 @@ if (
 ) {
   addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260930-car2', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260930-car3', {
         scope: './',
         updateViaCache: 'none',
       });
       await registration.update();
-    } catch {
-      // The car lab still works online if service worker registration is unavailable.
-    }
+    } catch {}
   });
 }
