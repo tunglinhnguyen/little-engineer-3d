@@ -48,6 +48,7 @@ export class Workbench {
   private dragging = false;
   private holdRequired = false;
   private holdReady = false;
+  private holdCancelled = false;
   private holdTimer = 0;
   private snapActive = false;
   private snapLabel = '';
@@ -476,6 +477,7 @@ export class Workbench {
 
       this.holdRequired = this.hooks.requiresHoldToMove?.(id) === true;
       this.holdReady = !this.holdRequired;
+      this.holdCancelled = false;
 
       if (this.holdRequired) {
         this.holdTimer = window.setTimeout(() => {
@@ -490,11 +492,24 @@ export class Workbench {
 
     this.canvas.addEventListener('pointermove', event => {
       if (event.pointerId !== this.dragPointerId || !this.dragModuleId) return;
-      if (!this.holdReady) return;
 
       const distance = this.dragStart.distanceTo(
         new THREE.Vector2(event.clientX, event.clientY),
       );
+
+      // A long-press must be a deliberate hold, not a slow continuation of
+      // an accidental swipe. Moving before the hold threshold cancels the
+      // unlock for the rest of this touch.
+      if (this.holdRequired && !this.holdReady) {
+        if (distance > 10) {
+          clearTimeout(this.holdTimer);
+          this.holdTimer = 0;
+          this.holdCancelled = true;
+        }
+        return;
+      }
+
+      if (this.holdCancelled) return;
       if (!this.dragging && distance < 7) return;
 
       this.updatePointer(event);
@@ -563,6 +578,7 @@ export class Workbench {
     this.dragging = false;
     this.holdRequired = false;
     this.holdReady = false;
+    this.holdCancelled = false;
     this.snapActive = false;
     this.snapLabel = '';
     this.controls.enabled = true;
