@@ -674,6 +674,12 @@ if (new URLSearchParams(location.search).has('qa')) {
     rendered(id: string) {
       return workbench.renderedTransform(id);
     },
+    screen(id: string) {
+      return workbench.screenPointForModule(id);
+    },
+    screenWorld(position: Vector3Tuple) {
+      return workbench.screenPointForWorld(position);
+    },
     snapPose(type: Exclude<ModuleType, 'road-straight'>) {
       if (type === 'car-base') return { position: CHASSIS_HOME, rotationY: CAR_YAW };
       return partSlotPose(type);
