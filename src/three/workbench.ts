@@ -3,14 +3,24 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MODULES } from '../core/moduleRegistry';
 import { ConnectionGraph } from '../core/connectionGraph';
 import { buildVehicleRoute } from '../core/worldRoutes';
-import type { Connection, ModuleInstance } from '../core/types';
+import type { Connection, ModuleInstance, Vector3Tuple } from '../core/types';
 import { createModuleObject, setPortVisualsVisible } from './moduleFactory';
+
+export interface SnapPose {
+  position: Vector3Tuple;
+  rotationY: number;
+  label?: string;
+}
 
 export interface WorkbenchHooks {
   onSelect(id: string | null): void;
   onGraphChanged(): void;
   canEdit(): boolean;
   canMove?(id: string): boolean;
+  requiresHoldToMove?(id: string): boolean;
+  getSnapPose?(id: string, position: Vector3Tuple): SnapPose | null;
+  onDrop?(id: string, snapped: boolean): void;
+  onHoldReady?(id: string): void;
 }
 
 export class Workbench {
@@ -27,13 +37,21 @@ export class Workbench {
   private ray = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
   private dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -.65);
+
   private dragPointerId: number | null = null;
   private dragModuleId: string | null = null;
   private dragStart = new THREE.Vector2();
   private dragOrigin = new THREE.Vector3();
+  private dragOriginRotation = 0;
   private dragOffset = new THREE.Vector3();
   private dragConnections: Connection[] = [];
   private dragging = false;
+  private holdRequired = false;
+  private holdReady = false;
+  private holdTimer = 0;
+  private snapActive = false;
+  private snapLabel = '';
+
   private running = false;
   private rpm = new Map<string, number>();
   private vehicleProgress = new Map<string, number>();
@@ -74,7 +92,7 @@ export class Workbench {
     grid.position.y = .01;
     const gridMaterial = grid.material as THREE.Material;
     gridMaterial.transparent = true;
-    gridMaterial.opacity = .32;
+    gridMaterial.opacity = .28;
     this.scene.add(grid);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6d8278, 2.15));
@@ -107,14 +125,10 @@ export class Workbench {
     requestAnimationFrame(time => this.loop(time));
   }
 
-  setPlayerName(_name: string) {
-    // The focused car lab does not render a separate world sign.
-  }
+  setPlayerName(_name: string) {}
 
-  addInstance(instance: ModuleInstance, attachToId: string | null = null) {
+  addInstance(instance: ModuleInstance) {
     this.graph.addModule(instance);
-    if (attachToId) this.graph.attachModuleToTarget(instance.id, attachToId);
-
     const object = createModuleObject(instance);
     this.root.add(object);
     this.objects.set(instance.id, object);
@@ -152,63 +166,6 @@ export class Workbench {
     this.hooks.onGraphChanged();
   }
 
-  snapSelected() {
-    if (!this.selectedId || !this.hooks.canEdit()) return false;
-    if (this.hooks.canMove?.(this.selectedId) === false) return false;
-
-    const module = this.graph.modules.get(this.selectedId);
-    const object = this.objects.get(this.selectedId);
-    if (!module || !object) return false;
-
-    let joined = false;
-    for (let i = 0; i < 4; i++) {
-      if (!this.graph.snapModule(module.id)) break;
-      joined = true;
-    }
-    object.position.set(...module.position);
-    object.rotation.y = module.rotationY;
-    this.refreshConnectionVisuals();
-    this.refreshPorts();
-
-    if (joined) this.hooks.onGraphChanged();
-    return joined;
-  }
-
-  detachSelected() {
-    if (!this.selectedId || !this.hooks.canEdit()) return false;
-    if (this.hooks.canMove?.(this.selectedId) === false) return false;
-
-    const count =
-      this.graph.incoming(this.selectedId).length +
-      this.graph.outgoing(this.selectedId).length;
-
-    if (!count) return false;
-    this.graph.disconnectModule(this.selectedId);
-    this.refreshConnectionVisuals();
-    this.refreshPorts();
-    this.hooks.onGraphChanged();
-    return true;
-  }
-
-  rotateSelected() {
-    if (!this.selectedId || !this.hooks.canEdit()) return;
-    if (this.hooks.canMove?.(this.selectedId) === false) return;
-
-    const module = this.graph.modules.get(this.selectedId);
-    const object = this.objects.get(this.selectedId);
-    if (!module || !object) return;
-
-    this.graph.disconnectModule(module.id);
-    module.rotationY = (module.rotationY + Math.PI / 2) % (Math.PI * 2);
-    object.rotation.y = module.rotationY;
-    this.graph.snapModule(module.id);
-    object.position.set(...module.position);
-    object.rotation.y = module.rotationY;
-    this.refreshConnectionVisuals();
-    this.refreshPorts();
-    this.hooks.onGraphChanged();
-  }
-
   toggleSwitch() {
     if (!this.selectedId) return;
     const module = this.graph.modules.get(this.selectedId);
@@ -230,12 +187,10 @@ export class Workbench {
     running: boolean,
     rpm: Map<string, number>,
     _active: Set<string>,
-    _legacyFluid: Set<string> = new Set(),
   ) {
     this.finishDrag(true);
     this.running = running;
     this.rpm = rpm;
-    this.connectionLayer.visible = !running;
 
     if (!running) {
       this.vehicleProgress.clear();
@@ -261,7 +216,7 @@ export class Workbench {
     const object = this.objects.get(id);
     if (!object) return null;
     return {
-      position: object.position.toArray() as [number, number, number],
+      position: object.position.toArray() as Vector3Tuple,
       rotationY: object.rotation.y,
     };
   }
@@ -281,7 +236,11 @@ export class Workbench {
     } else if (name === 'right') {
       this.camera.position.set(target.x + distance, target.y + distance * .32, target.z);
     } else {
-      this.camera.position.set(target.x + distance * .66, target.y + distance * .58, target.z + distance * .78);
+      this.camera.position.set(
+        target.x + distance * .66,
+        target.y + distance * .58,
+        target.z + distance * .78,
+      );
     }
 
     this.camera.lookAt(target);
@@ -338,6 +297,29 @@ export class Workbench {
     this.hooks.onSelect(id);
   }
 
+  private setSnapHighlight(id: string | null, active: boolean) {
+    if (!id) return;
+    const object = this.objects.get(id);
+    if (!object) return;
+
+    object.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || child.userData.isPortVisual) return;
+      const mat = mesh.material;
+      if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+      if (active) {
+        mat.emissive.setHex(0x2fc978);
+        mat.emissiveIntensity = .34;
+      } else if (id === this.selectedId) {
+        mat.emissive.setHex(0x15364a);
+        mat.emissiveIntensity = .08;
+      } else {
+        mat.emissive.setHex(0x000000);
+        mat.emissiveIntensity = 0;
+      }
+    });
+  }
+
   private refreshPorts() {
     for (const [id, object] of this.objects) {
       const module = this.graph.modules.get(id);
@@ -381,17 +363,54 @@ export class Workbench {
       const b = this.worldPort(to, connection.toPortId);
       if (!a || !b) continue;
 
+      const midpoint = a.clone().lerp(b, .5);
+      midpoint.y += .18;
       const color = connection.signal === 'power' ? 0xff5a52 : 0xffbd38;
-      const geometry = new THREE.BufferGeometry().setFromPoints([
+      const curve = new THREE.QuadraticBezierCurve3(
         a.clone().add(new THREE.Vector3(0,.05,0)),
+        midpoint,
         b.clone().add(new THREE.Vector3(0,.05,0)),
-      ]);
+      );
+      const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(18));
       const line = new THREE.Line(
         geometry,
-        new THREE.LineBasicMaterial({ color, transparent: true, opacity: .9 }),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: .92 }),
       );
+      line.userData.signal = connection.signal;
       this.connectionLayer.add(line);
     }
+  }
+
+  private beginPointerDrag(
+    id: string,
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+  ) {
+    const root = this.objects.get(id);
+    if (!root) return false;
+
+    this.updatePointerFromCoords(clientX, clientY);
+    this.dragPlane.constant = -root.position.y;
+    const point = new THREE.Vector3();
+    if (!this.ray.ray.intersectPlane(this.dragPlane, point)) return false;
+
+    this.dragPointerId = pointerId;
+    this.dragModuleId = id;
+    this.dragStart.set(clientX, clientY);
+    this.dragOrigin.copy(root.position);
+    this.dragOriginRotation = root.rotation.y;
+    this.dragOffset.copy(root.position).sub(point);
+    this.dragConnections = [
+      ...this.graph.incoming(id),
+      ...this.graph.outgoing(id),
+    ];
+    this.dragging = false;
+    this.snapActive = false;
+    this.snapLabel = '';
+    this.controls.enabled = false;
+    this.canvas.setPointerCapture(pointerId);
+    return true;
   }
 
   private bindPointer() {
@@ -410,39 +429,36 @@ export class Workbench {
       this.select(id);
 
       if (!this.hooks.canEdit() || this.hooks.canMove?.(id) === false) return;
+      if (!this.beginPointerDrag(id, event.pointerId, event.clientX, event.clientY)) return;
 
-      this.dragPlane.constant = -root.position.y;
-      const point = new THREE.Vector3();
-      if (!this.ray.ray.intersectPlane(this.dragPlane, point)) return;
+      this.holdRequired = this.hooks.requiresHoldToMove?.(id) === true;
+      this.holdReady = !this.holdRequired;
 
-      this.dragPointerId = event.pointerId;
-      this.dragModuleId = id;
-      this.dragStart.set(event.clientX, event.clientY);
-      this.dragOrigin.copy(root.position);
-      this.dragOffset.copy(root.position).sub(point);
-      this.dragConnections = [];
-      this.dragging = false;
-      this.controls.enabled = false;
-      this.canvas.setPointerCapture(event.pointerId);
+      if (this.holdRequired) {
+        this.holdTimer = window.setTimeout(() => {
+          if (this.dragPointerId !== event.pointerId || this.dragModuleId !== id) return;
+          this.holdReady = true;
+          this.setSnapHighlight(id, true);
+          this.hooks.onHoldReady?.(id);
+          try { navigator.vibrate?.(20); } catch {}
+        }, 460);
+      }
     });
 
     this.canvas.addEventListener('pointermove', event => {
       if (event.pointerId !== this.dragPointerId || !this.dragModuleId) return;
+      if (!this.holdReady) return;
 
-      if (
-        !this.dragging &&
-        this.dragStart.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) < 6
-      ) return;
+      const distance = this.dragStart.distanceTo(
+        new THREE.Vector2(event.clientX, event.clientY),
+      );
+      if (!this.dragging && distance < 7) return;
 
       this.updatePointer(event);
       const point = new THREE.Vector3();
       if (!this.ray.ray.intersectPlane(this.dragPlane, point)) return;
 
       if (!this.dragging) {
-        this.dragConnections = [
-          ...this.graph.incoming(this.dragModuleId),
-          ...this.graph.outgoing(this.dragModuleId),
-        ];
         this.graph.disconnectModule(this.dragModuleId);
         this.dragging = true;
         this.refreshConnectionVisuals();
@@ -453,36 +469,59 @@ export class Workbench {
       if (!object || !module) return;
 
       point.add(this.dragOffset);
-      const x = Math.round(point.x * 4) / 4;
-      const z = Math.round(point.z * 4) / 4;
-      object.position.set(x, this.dragOrigin.y, z);
-      module.position = [x, this.dragOrigin.y, z];
+      const raw: Vector3Tuple = [
+        Math.round(point.x * 8) / 8,
+        this.dragOrigin.y,
+        Math.round(point.z * 8) / 8,
+      ];
+
+      module.position = raw;
+      const pose = this.hooks.getSnapPose?.(module.id, raw) ?? null;
+
+      this.setSnapHighlight(module.id, false);
+      if (pose) {
+        module.position = [...pose.position];
+        module.rotationY = pose.rotationY;
+        this.snapActive = true;
+        this.snapLabel = pose.label ?? '';
+        this.setSnapHighlight(module.id, true);
+      } else {
+        this.snapActive = false;
+        this.snapLabel = '';
+      }
+
+      object.position.set(...module.position);
+      object.rotation.y = module.rotationY;
     });
 
-    this.canvas.addEventListener('pointerup', event => {
+    const end = (event: PointerEvent, cancelled: boolean) => {
       if (event.pointerId !== this.dragPointerId) return;
-      this.finishDrag(false);
-    });
+      this.finishDrag(cancelled);
+    };
 
-    this.canvas.addEventListener('pointercancel', event => {
-      if (event.pointerId === this.dragPointerId) this.finishDrag(true);
-    });
-
-    this.canvas.addEventListener('lostpointercapture', event => {
-      if (event.pointerId === this.dragPointerId) this.finishDrag(true);
-    });
+    this.canvas.addEventListener('pointerup', event => end(event, false));
+    this.canvas.addEventListener('pointercancel', event => end(event, true));
+    this.canvas.addEventListener('lostpointercapture', event => end(event, true));
   }
 
   private finishDrag(cancelled: boolean) {
     if (this.dragPointerId === null) return;
 
+    clearTimeout(this.holdTimer);
+    this.holdTimer = 0;
+
     const pointerId = this.dragPointerId;
     const id = this.dragModuleId;
     const changed = this.dragging;
+    const snapped = this.snapActive;
 
     this.dragPointerId = null;
     this.dragModuleId = null;
     this.dragging = false;
+    this.holdRequired = false;
+    this.holdReady = false;
+    this.snapActive = false;
+    this.snapLabel = '';
     this.controls.enabled = true;
 
     const module = id ? this.graph.modules.get(id) : undefined;
@@ -490,18 +529,18 @@ export class Workbench {
 
     if (changed && module && object) {
       if (cancelled) {
-        module.position = this.dragOrigin.toArray() as [number, number, number];
+        module.position = this.dragOrigin.toArray() as Vector3Tuple;
+        module.rotationY = this.dragOriginRotation;
         for (const connection of this.dragConnections) this.graph.connect(connection);
       } else {
-        for (let i = 0; i < 4; i++) {
-          if (!this.graph.snapModule(module.id)) break;
-        }
+        this.hooks.onDrop?.(module.id, snapped);
       }
 
       object.position.set(...module.position);
       object.rotation.y = module.rotationY;
     }
 
+    if (id) this.setSnapHighlight(id, false);
     this.dragConnections = [];
     this.refreshConnectionVisuals();
     this.refreshPorts();
@@ -519,10 +558,14 @@ export class Workbench {
   }
 
   private updatePointer(event: PointerEvent) {
+    this.updatePointerFromCoords(event.clientX, event.clientY);
+  }
+
+  private updatePointerFromCoords(clientX: number, clientY: number) {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.set(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.ray.setFromCamera(this.pointer, this.camera);
   }
@@ -550,14 +593,16 @@ export class Workbench {
   private nearestRouteT(curve: THREE.CatmullRomCurve3, position: THREE.Vector3) {
     let bestT = 0;
     let bestDistance = Infinity;
-    for (let i = 0; i <= 80; i++) {
-      const t = i / 80;
+
+    for (let index = 0; index <= 80; index++) {
+      const t = index / 80;
       const distance = curve.getPointAt(t).distanceToSquared(position);
       if (distance < bestDistance) {
         bestDistance = distance;
         bestT = t;
       }
     }
+
     return bestT;
   }
 
@@ -568,6 +613,13 @@ export class Workbench {
     this.last = now;
 
     if (this.running) {
+      const pulse = .72 + Math.sin(now * .012) * .2;
+      for (const child of this.connectionLayer.children) {
+        const line = child as THREE.Line;
+        const mat = line.material;
+        if (mat instanceof THREE.LineBasicMaterial) mat.opacity = pulse;
+      }
+
       for (const [id, speed] of this.rpm) {
         const object = this.objects.get(id);
         if (!object) continue;
@@ -575,10 +627,11 @@ export class Workbench {
         const angle = speed / 60 * Math.PI * 2 * dt;
         object.traverse(child => {
           if (!child.userData.rotor) return;
+          const direction = Number(child.userData.rotorDirection ?? 1);
           const axis = child.userData.rotorAxis;
-          if (axis === 'z') child.rotation.z += angle;
-          else if (axis === 'y') child.rotation.y += angle;
-          else child.rotation.x += angle;
+          if (axis === 'z') child.rotation.z += angle * direction;
+          else if (axis === 'y') child.rotation.y += angle * direction;
+          else child.rotation.x += angle * direction;
         });
       }
 
