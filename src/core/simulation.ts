@@ -2,9 +2,7 @@ import { MODULES } from './moduleRegistry';
 import { ConnectionGraph } from './connectionGraph';
 import type { SimulationState } from './types';
 
-const LOAD_CURRENT = {
-  motor: .45,
-} as const;
+const MOTOR_CURRENT = .45;
 
 export class SimulationEngine {
   constructor(private graph: ConnectionGraph) {}
@@ -42,12 +40,12 @@ export class SimulationEngine {
         powered.add(next.id);
         active.add(next.id);
         voltage.set(next.id, volts);
-        if (next.type === 'motor') current.set(next.id, LOAD_CURRENT.motor);
+        if (next.type === 'motor') current.set(next.id, MOTOR_CURRENT);
         powerQueue.push(next.id);
       }
     }
 
-    const rotationQueue: { id: string; rpm: number; torque: number }[] = [];
+    const rotationQueue: Array<{ id: string; rpm: number; torque: number }> = [];
 
     for (const module of this.graph.modules.values()) {
       const behavior = MODULES[module.type].behavior;
@@ -73,17 +71,28 @@ export class SimulationEngine {
         const behavior = MODULES[next.type].behavior;
         let nextRpm = node.rpm;
         let nextTorque = node.torque * .98;
+        let propagates = false;
 
         if (behavior.kind === 'transmission') {
           nextRpm = node.rpm * behavior.ratio;
-          nextTorque = node.torque / Math.max(.05, behavior.ratio) * behavior.efficiency;
+          nextTorque =
+            node.torque / Math.max(.05, Math.abs(behavior.ratio)) *
+            behavior.efficiency;
+          propagates = true;
+        } else if (behavior.kind === 'pass-rotation') {
+          nextTorque = node.torque * behavior.efficiency;
+          propagates = true;
+        } else if (behavior.kind === 'vehicle') {
+          propagates = true;
+        } else if (behavior.kind === 'wheel') {
+          propagates = false;
         }
 
         rpm.set(next.id, nextRpm);
         torque.set(next.id, nextTorque);
         active.add(next.id);
 
-        if (behavior.kind === 'transmission') {
+        if (propagates) {
           rotationQueue.push({
             id: next.id,
             rpm: nextRpm,
@@ -96,6 +105,7 @@ export class SimulationEngine {
     for (const source of this.graph.modules.values()) {
       const behavior = MODULES[source.type].behavior;
       if (behavior.kind !== 'source') continue;
+
       let amps = 0;
       const seen = new Set<string>([source.id]);
       const queue = [source.id];
@@ -106,7 +116,7 @@ export class SimulationEngine {
           const next = this.graph.modules.get(edge.toModuleId);
           if (!next || seen.has(next.id) || !powered.has(next.id)) continue;
           seen.add(next.id);
-          if (next.type === 'motor') amps += LOAD_CURRENT.motor;
+          if (next.type === 'motor') amps += MOTOR_CURRENT;
           queue.push(next.id);
         }
       }
