@@ -130,11 +130,11 @@ button:disabled{opacity:.38;filter:saturate(.65)}
 
 @media(max-width:900px){
   .topbar{left:8px;right:8px;top:7px}
-  .build-progress{left:8px;top:73px;width:250px}
-  .selection-panel{right:8px;top:73px;width:250px}
-  .camera-bar{top:auto;bottom:124px}
-  .palette{left:8px;right:8px;bottom:max(7px,env(safe-area-inset-bottom));padding:7px}
-  .part{min-height:84px;padding:6px 4px}
+  .build-progress{left:8px;top:73px;width:252px}
+  .selection-panel{right:8px;top:132px;width:252px}
+  .camera-bar{left:auto;right:8px;transform:none;top:73px;bottom:auto}
+  .palette{left:8px;right:8px;bottom:max(7px,env(safe-area-inset-bottom));padding:8px}
+  .part{min-height:78px;padding:6px 4px}
   .part small{display:none}
   .brand small{display:none}
 }
@@ -145,19 +145,26 @@ button:disabled{opacity:.38;filter:saturate(.65)}
   .mode-actions{gap:4px}
   .mode-actions button{min-height:42px;padding:0 9px;font-size:9px}
   .mode-actions .icon{min-width:40px}
-  .build-progress{width:220px}
-  .selection-panel{top:auto;bottom:124px;width:min(290px,calc(100vw - 16px))}
-  .camera-bar{left:auto;right:8px;transform:none;top:73px;bottom:auto;max-width:calc(100vw - 240px);overflow-x:auto}
-  .parts{display:flex;overflow-x:auto;gap:6px}
-  .part{flex:0 0 96px}
+  .build-progress{width:222px}
+  .camera-bar{right:8px;top:73px;max-width:calc(100vw - 244px)}
+  .camera-bar button{min-width:70px}
+  .selection-panel{top:auto;right:8px;bottom:188px;width:min(260px,calc(100vw - 16px))}
+  .parts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible}
+  .part{min-width:0;min-height:70px}
+  .palette-title small{max-width:340px}
 }
 
 @media(max-width:560px){
   .brand small,.mode-actions #undoBtn,.mode-actions #redoBtn{display:none}
-  .build-progress{top:69px;left:6px;width:192px;padding:8px}
+  .build-progress{top:69px;left:6px;width:194px;padding:8px}
   .step-list{grid-template-columns:repeat(2,1fr)}
   .progress-step{min-height:34px;padding:4px}
   .progress-step span{width:20px;height:20px;flex-basis:20px}
   .camera-bar{right:6px;top:69px;max-width:calc(100vw - 208px)}
-  .selection-panel{left:6px;right:6px;width:auto}
+  .camera-bar button{min-width:62px;padding:0 7px}
+  .selection-panel{left:6px;right:6px;width:auto;bottom:182px}
+  .palette-title{align-items:flex-start}
+  .palette-legend{display:none}
+  .part .part-icon{font-size:22px}
+  .part b{font-size:8.5px}
 }
