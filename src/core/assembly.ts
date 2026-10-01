@@ -1,39 +1,44 @@
 import { ConnectionGraph, normalizeConnection } from './connectionGraph';
-import { CAR_PALETTE, CONTROL_TYPES, MODULES, ROAD_TYPES } from './moduleRegistry';
+import { CAR_PALETTE, CAR_PART_TYPES, CONTROL_TYPES, MODULES, portsForModule, ROAD_TYPES } from './moduleRegistry';
 import { add, angleDelta, CHASSIS_HEIGHT, distanceXZ, HALF_TRACK, LOCAL_SLOTS, ROAD_HEIGHT, ROAD_WIDTH, rotateY, SNAP_DISTANCE, WHEEL_LOCAL, WHEEL_SLOTS, WHEELBASE } from './layout';
 import type { ModuleInstance, ModuleType, Placement, Vector3Tuple } from './types';
 import { roadCenterline, projectPolyline, pointAtDistance } from './worldRoutes';
+import { axleWheelKeys, chassisSlots, newVehicle, TRAILER_SLOTS, vehicleForModule, vehicleKind, vehicleSpec, type MountSlot } from './vehicles';
 
 export const REQUIRED_PARTS=12;
 export const UNIQUE_CAR=new Set<ModuleType>(CAR_PALETTE.filter(t=>t!=='wheel'));
 export const first=(g:ConnectionGraph,type:ModuleType)=>[...g.modules.values()].find(m=>m.type===type);
 export const occupant=(g:ConnectionGraph,parentId:string,slotKey:string,except?:string)=>[...g.modules.values()].find(m=>m.parentId===parentId&&m.slotKey===slotKey&&m.id!==except);
-export const isCarPart=(m:ModuleInstance)=>CAR_PALETTE.includes(m.type);
+export const isCarPart=(m:ModuleInstance)=>CAR_PART_TYPES.has(m.type);
+
+export function mountingSlots(g:ConnectionGraph,parent:ModuleInstance):MountSlot[]{
+ if(parent.type==='car-base')return chassisSlots(vehicleKind(g,parent.id));
+ if(parent.type==='hitch')return [{key:'trailer',type:'trailer',position:[0,0,0],label:'Chốt rơ-moóc',required:false}];
+ if(parent.type==='trailer')return TRAILER_SLOTS;
+ const axle=parent.type==='front-axle'?'trước':parent.type==='drive-axle'?'sau':parent.slotKey==='trailer-front-axle'?'rơ-moóc trước':parent.slotKey==='trailer-rear-axle'?'rơ-moóc sau':'trục phụ';
+ return axleWheelKeys(parent).map(key=>({key,type:'wheel',position:[0,0,key.endsWith('l')?HALF_TRACK:-HALF_TRACK],label:'Bánh '+axle+(key.endsWith('l')?' trái':' phải'),required:true}));
+}
 
 export function slotPose(g:ConnectionGraph,parentId:string,slotKey:string):Placement|null {
  const parent=g.modules.get(parentId);if(!parent)return null;
- let local:Vector3Tuple|undefined;
- if(parent.type==='car-base') local=LOCAL_SLOTS[slotKey];
- if(parent.type==='front-axle'&&['wheel-fl','wheel-fr'].includes(slotKey)) local=WHEEL_LOCAL[slotKey];
- if(parent.type==='drive-axle'&&['wheel-rl','wheel-rr'].includes(slotKey)) local=WHEEL_LOCAL[slotKey];
- if(!local)return null;
- return {position:add(parent.position,rotateY(local,parent.rotationY)),rotationY:parent.rotationY,parentId,slotKey,label:slotKey.startsWith('wheel')?'Đầu trục':MODULES[slotKey as ModuleType]?.name};
+ const slot=mountingSlots(g,parent).find(s=>s.key===slotKey);if(!slot)return null;
+ return {position:add(parent.position,rotateY(slot.position,parent.rotationY)),rotationY:parent.rotationY,parentId,slotKey,label:slot.label===slot.key?MODULES[slot.type].name:slot.label};
 }
 
 export function roadsidePose(road:ModuleInstance,slotKey:string):Placement|null {
  if(!ROAD_TYPES.has(road.type)||!['side:-1','side:1'].includes(slotKey))return null;
  const points=roadCenterline(road),mid=points[Math.floor(points.length/2)],p=projectPolyline(points,mid),yaw=Math.atan2(-p.tangent[2],p.tangent[0]);
- const side=slotKey==='side:1'?1:-1,position=add(mid,rotateY([0,0,side*(ROAD_WIDTH/2+.30)],yaw));position[1]=road.position[1];
+ const side=slotKey==='side:1'?1:-1,position=add(mid,rotateY([0,0,side*((road.type==='road-wide-curve'?4.4:ROAD_WIDTH)/2+.30)],yaw));position[1]=road.position[1];
  return {position,rotationY:yaw+Math.PI/2,parentId:road.id,slotKey,label:'Lề đường'};
 }
 export function isMounted(g:ConnectionGraph,m:ModuleInstance|undefined):boolean {
  if(!m||!m.parentId||!m.slotKey)return false;
  if(m.type==='car-base')return ROAD_TYPES.has(g.modules.get(m.parentId)?.type as ModuleType)&&m.slotKey==='road';
  if(CONTROL_TYPES.has(m.type)){const road=g.modules.get(m.parentId),p=road?roadsidePose(road,m.slotKey):null;return Boolean(p&&distanceXZ(m.position,p.position)<.015&&Math.abs(m.position[1]-p.position[1])<.015&&Math.abs(angleDelta(m.rotationY,p.rotationY))<.015);}
- if(m.type==='wheel'&&!m.slotKey.startsWith('wheel-'))return false;
- if(m.type!=='wheel'&&m.slotKey!==m.type)return false;
+ const parent=g.modules.get(m.parentId);if(!parent||!mountingSlots(g,parent).some(s=>s.key===m.slotKey&&s.type===m.type))return false;
+ const owner=vehicleForModule(g,parent);if(m.vehicleId&&owner&&m.vehicleId!==owner)return false;
  const pose=slotPose(g,m.parentId,m.slotKey);
- return Boolean(pose&&distanceXZ(m.position,pose.position)<.015&&Math.abs(m.position[1]-pose.position[1])<.015&&Math.abs(angleDelta(m.rotationY,pose.rotationY))<.015);
+ return Boolean(pose&&distanceXZ(m.position,pose.position)<.015&&Math.abs(m.position[1]-pose.position[1])<.015&&(m.type==='trailer'||Math.abs(angleDelta(m.rotationY,pose.rotationY))<.015));
 }
 export function isInstalled(g:ConnectionGraph,m:ModuleInstance|undefined):boolean {
  if(!m||!isCarPart(m))return false;
@@ -69,24 +74,22 @@ export function movementRoot(g:ConnectionGraph,id:string):string {
 
 export function placementCandidates(g:ConnectionGraph,id:string):Placement[]{
  const m=g.modules.get(id);if(!m)return [];
- if(m.type==='wheel'){
+ if(isCarPart(m)&&m.type!=='car-base'){
   const poses:Placement[]=[];
-  for(const type of ['front-axle','drive-axle'] as ModuleType[]){
-   const axle=first(g,type);if(!axle)continue;
-   for(const key of WHEEL_SLOTS){const p=slotPose(g,axle.id,key);if(p&&!occupant(g,axle.id,key,id))poses.push(p);}
-  }
-  return poses;
- }
- if(UNIQUE_CAR.has(m.type)&&m.type!=='car-base'){
-  const chassis=first(g,'car-base');if(!chassis||occupant(g,chassis.id,m.type,id))return [];
-  const pose=slotPose(g,chassis.id,m.type);return pose?[pose]:[];
+  for(const parent of g.modules.values()){
+   if(parent.id===id||descendants(g,id).includes(parent.id))continue;
+   const owner=vehicleForModule(g,parent);if(m.vehicleId&&owner!==m.vehicleId)continue;
+   if(owner&&g.vehicles.get(owner)?.parked)continue;
+   for(const slot of mountingSlots(g,parent))if(slot.type===m.type&&!occupant(g,parent.id,slot.key,id)){const pose=slotPose(g,parent.id,slot.key);if(pose)poses.push(pose);}
+  }return poses;
  }
  if(m.type==='car-base'){
   return [...g.modules.values()].filter(r=>ROAD_TYPES.has(r.type)).map(r=>{
-   const points=roadCenterline(r),p=projectPolyline(points,m.position),s=Math.max(0,p.s-WHEELBASE/2);
+   const spec=vehicleSpec(vehicleKind(g,m.id));
+   const points=roadCenterline(r),p=projectPolyline(points,m.position),s=Math.max(0,p.s+spec.rear);
    const rear=pointAtDistance(points,s).point,a=pointAtDistance(points,Math.max(0,s-.10)).point,b=pointAtDistance(points,s+.10).point;
    const yaw=Math.atan2(-(b[2]-a[2]),b[0]-a[0]);
-   const position=add([rear[0],CHASSIS_HEIGHT+ROAD_HEIGHT,rear[2]],rotateY([WHEELBASE/2,0,0],yaw));
+   const position=add([rear[0],CHASSIS_HEIGHT+ROAD_HEIGHT,rear[2]],rotateY([-spec.rear,0,0],yaw));
    return {position,rotationY:yaw,parentId:r.id,slotKey:'road',label:'Mặt đường'};
   });
  }
@@ -128,7 +131,16 @@ export function moveGroup(g:ConnectionGraph,id:string,position:Vector3Tuple,yaw:
 }
 export function commitPlacement(g:ConnectionGraph,id:string,pose:Placement|null){
  const m=g.modules.get(id);if(!m)return;
- if(pose){moveGroup(g,id,pose.position,pose.rotationY);m.parentId=pose.parentId;m.slotKey=pose.slotKey;}
+ if(pose&&isCarPart(m)&&m.type!=='car-base'){
+  const parent=pose.parentId?g.modules.get(pose.parentId):undefined;
+  if(!parent||!mountingSlots(g,parent).some(s=>s.key===pose.slotKey&&s.type===m.type)||occupant(g,parent.id,pose.slotKey!,id))return;
+  const owner=vehicleForModule(g,parent);if(m.vehicleId&&owner!==m.vehicleId)return;
+ }
+ if(pose){moveGroup(g,id,pose.position,pose.rotationY);m.parentId=pose.parentId;m.slotKey=pose.slotKey;
+  if(m.type==='idler-axle'){const keys=axleWheelKeys(m);for(const child of g.modules.values())if(child.parentId===id&&child.type==='wheel')child.slotKey=keys[child.slotKey?.endsWith('l')?0:1];}
+  const owner=m.type==='car-base'?m.id:pose.parentId?vehicleForModule(g,g.modules.get(pose.parentId)):undefined;
+  if(owner)for(const member of descendants(g,id))g.modules.get(member)!.vehicleId=owner;
+ }
  else {m.parentId=undefined;m.slotKey=undefined;if(m.type==='car-base')moveGroup(g,id,[m.position[0],CHASSIS_HEIGHT,m.position[2]],m.rotationY);}
  if(ROAD_TYPES.has(m.type)&&pose)g.snapModule(id);
  reconcileAssembly(g);
@@ -143,29 +155,38 @@ export function detachAssembly(g:ConnectionGraph,id:string,position:Vector3Tuple
 export function reconcileAssembly(g:ConnectionGraph){
  // Rebuild links from valid physical attachments. Status reads never mutate the graph.
  for(const [id,c] of g.connections)if(!ROAD_TYPES.has(g.modules.get(c.fromModuleId)?.type as ModuleType)||!ROAD_TYPES.has(g.modules.get(c.toModuleId)?.type as ModuleType))g.connections.delete(id);
- const car=first(g,'car-base');if(!car)return;
- const at=(type:ModuleType)=>{const m=first(g,type);return m&&isInstalled(g,m)?m:undefined;};
  const link=(a:ModuleInstance|undefined,ap:string,b:ModuleInstance|undefined,bp:string)=>{
   if(!a||!b)return;
-  const pa=MODULES[a.type].ports.find(p=>p.id===ap),pb=MODULES[b.type].ports.find(p=>p.id===bp);if(!pa||!pb)return;
+  const pa=portsForModule(a).find(p=>p.id===ap),pb=portsForModule(b).find(p=>p.id===bp);if(!pa||!pb)return;
   const c=normalizeConnection(a,pa,b,pb);if(c)g.connect({id:'assembly:'+a.id+':'+ap+'>'+b.id+':'+bp,...c});
  };
- for(const t of UNIQUE_CAR)if(t!=='car-base')link(car,t+'-mount',at(t),'mount-in');
+ for(const car of g.modules.values())if(car.type==='car-base'){
+ const at=(type:ModuleType)=>[...g.modules.values()].find(m=>m.type===type&&vehicleForModule(g,m)===car.id&&isInstalled(g,m));
+ for(const parentId of descendants(g,car.id)){
+  const parent=g.modules.get(parentId)!;if(!isInstalled(g,parent))continue;
+  for(const slot of mountingSlots(g,parent)){
+   const child=occupant(g,parent.id,slot.key);if(!child||!isMounted(g,child))continue;
+   if(slot.type==='wheel'){const left=slot.key.endsWith('l');link(parent,left?'wheel-left':'wheel-right',child,parent.type==='drive-axle'?'rotation-in':'mount-in');}
+   else link(parent,parent.type==='hitch'?'tow-out':slot.key+'-mount',child,'mount-in');
+  }
+ }
  link(at('battery'),'power-out',at('switch'),'power-in');
  link(at('switch'),'power-out',at('motor'),'power-in');
  link(at('motor'),'return-out',at('battery'),'return-in');
  link(at('motor'),'rotation-out',at('gearbox'),'rotation-in');
  link(at('gearbox'),'rotation-out',at('differential'),'rotation-in');
  link(at('differential'),'rotation-out',at('drive-axle'),'rotation-in');
- const front=at('front-axle'),rear=at('drive-axle');
- link(front,'wheel-left',front?occupant(g,front.id,'wheel-fl'):undefined,'mount-in');
- link(front,'wheel-right',front?occupant(g,front.id,'wheel-fr'):undefined,'mount-in');
- link(rear,'wheel-left',rear?occupant(g,rear.id,'wheel-rl'):undefined,'rotation-in');
- link(rear,'wheel-right',rear?occupant(g,rear.id,'wheel-rr'):undefined,'rotation-in');
+ }
 }
-export function assemblyCount(g:ConnectionGraph){return [...g.modules.values()].filter(m=>isInstalled(g,m)).length;}
+export function assemblyCount(g:ConnectionGraph,vehicleId?:string){return [...g.modules.values()].filter(m=>isInstalled(g,m)&&(!vehicleId||vehicleForModule(g,m)===vehicleId)).length;}
 
 export function restoreAssembly(g:ConnectionGraph){
+ for(const car of g.modules.values())if(car.type==='car-base'){
+  if(!g.vehicles.has(car.id))newVehicle(g,car.vehicleKind??'car',car.id);
+  car.vehicleId=car.id;car.vehicleKind=g.vehicles.get(car.id)!.kind;car.color=g.vehicles.get(car.id)!.color;
+ }
+ const fallback=g.vehicles.size===1?g.vehicles.keys().next().value:undefined;
+ for(const m of g.modules.values())if(isCarPart(m))m.vehicleId=vehicleForModule(g,m)??fallback;
  // Repair orphaned or stale ownership on load instead of trusting cached readiness.
  for(const m of g.modules.values())if(m.parentId&&!isMounted(g,m)){m.parentId=undefined;m.slotKey=undefined;}
  reconcileAssembly(g);

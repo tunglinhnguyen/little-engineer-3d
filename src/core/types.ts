@@ -10,8 +10,13 @@ export type ModuleType =
   | 'drive-axle'
   | 'wheel'
   | 'car-base'
+  | 'idler-axle'
+  | 'cargo-bed'
+  | 'hitch'
+  | 'trailer'
   | 'road-straight'
   | 'road-curve'
+  | 'road-wide-curve'
   | 'road-intersection'
   | 'traffic-light'
   | 'stop-sign'
@@ -60,6 +65,31 @@ export interface ModuleInstance {
   switchOn?: boolean;
   slotKey?: string;
   parentId?: string;
+  vehicleId?: string;
+  vehicleKind?: VehicleKind;
+  color?: string;
+  gearMode?: GearMode;
+}
+
+export type VehicleKind = 'car' | 'truck' | 'tractor';
+export type GearMode = 'power' | 'balanced' | 'speed';
+export type MissionKind = 'garage' | 'delivery' | 'trailer';
+export interface VehicleMission {
+  kind: MissionKind;
+  targetRoadId?: string;
+  status: 'choose' | 'ready' | 'running' | 'completed';
+  delivered?: number;
+}
+export interface ExperimentResult {gear:GearMode;cargo:number;speed:number;distance:number;force:number;stalled:boolean}
+export interface VehicleProfile {
+  id:string;
+  kind:VehicleKind;
+  name:string;
+  color:string;
+  parked:boolean;
+  cargo:number;
+  mission?:VehicleMission;
+  experiments:ExperimentResult[];
 }
 
 export interface Placement {

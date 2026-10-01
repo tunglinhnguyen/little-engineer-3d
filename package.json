@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run tests/core.test.ts",
-    "test:watch": "vitest tests/core.test.ts",
-    "check": "tsc -b --pretty false && vitest run tests/core.test.ts",
+    "test": "vitest run tests/core.test.ts tests/fleet.test.ts",
+    "test:watch": "vitest tests/core.test.ts tests/fleet.test.ts",
+    "check": "tsc -b --pretty false && vitest run tests/core.test.ts tests/fleet.test.ts",
     "qa:e2e": "playwright test"
   },
   "dependencies": {

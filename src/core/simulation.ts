@@ -1,6 +1,7 @@
 import { MODULES } from './moduleRegistry';
 import { ConnectionGraph } from './connectionGraph';
 import type { SimulationState } from './types';
+import { GEAR_RATIOS } from './vehicles';
 
 export class SimulationEngine {
  constructor(private graph:ConnectionGraph){}
@@ -32,7 +33,7 @@ export class SimulationEngine {
    for(const e of this.graph.outgoing(id,'rotation')){
     const next=this.graph.modules.get(e.toModuleId);if(!next||rpm.has(next.id))continue;
     const b=MODULES[next.type].behavior;let speed=rpm.get(id)!,force=torque.get(id)!;
-    if(b.kind==='transmission'){speed*=b.ratio;force=force/Math.abs(b.ratio)*b.efficiency;}
+    if(b.kind==='transmission'){const ratio=next.type==='gearbox'?GEAR_RATIOS[next.gearMode??'balanced']:b.ratio;speed*=ratio;force=force/Math.abs(ratio)*b.efficiency;}
     else if(b.kind==='pass-rotation')force*=b.efficiency;
     else if(b.kind==='wheel')force*=.5;
     else continue; // Neither a chassis nor a passive front axle receives RPM.

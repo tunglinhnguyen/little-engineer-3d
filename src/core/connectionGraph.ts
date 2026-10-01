@@ -1,4 +1,4 @@
-import { MODULES } from './moduleRegistry';
+import { MODULES, portsForModule } from './moduleRegistry';
 import type {
   Connection,
   ModuleInstance,
@@ -6,6 +6,7 @@ import type {
   ModuleType,
   SignalType,
   Vector3Tuple,
+  VehicleProfile,
 } from './types';
 
 export function portsCompatible(a: ModulePort, b: ModulePort) {
@@ -102,6 +103,8 @@ type SnapCandidate = {
 export class ConnectionGraph {
   readonly modules = new Map<string, ModuleInstance>();
   readonly connections = new Map<string, Connection>();
+  readonly vehicles = new Map<string, VehicleProfile>();
+  activeVehicleId:string|null=null;
 
   addModule(module: ModuleInstance) {
     this.modules.set(module.id, module);
@@ -115,8 +118,8 @@ export class ConnectionGraph {
   connect(connection: Connection) {
     const a=this.modules.get(connection.fromModuleId),b=this.modules.get(connection.toModuleId);
     if(!a||!b||a.id===b.id)return false;
-    const ap=MODULES[a.type].ports.find(p=>p.id===connection.fromPortId);
-    const bp=MODULES[b.type].ports.find(p=>p.id===connection.toPortId);
+    const ap=portsForModule(a).find(p=>p.id===connection.fromPortId);
+    const bp=portsForModule(b).find(p=>p.id===connection.toPortId);
     if(!ap||!bp||!portsCompatible(ap,bp)||ap.signal!==connection.signal)return false;
     const normalized=normalizeConnection(a,ap,b,bp);
     if(!normalized)return false;
@@ -171,10 +174,10 @@ export class ConnectionGraph {
     for (const other of this.modules.values()) {
       if (other.id === moving.id) continue;
 
-      for (const movingPort of MODULES[moving.type].ports) {
+      for (const movingPort of portsForModule(moving)) {
         if (this.isPortUsed(moving.id, movingPort.id)) continue;
 
-        for (const otherPort of MODULES[other.type].ports) {
+        for (const otherPort of portsForModule(other)) {
           if (this.isPortUsed(other.id, otherPort.id)) continue;
           if (!modulePortsCompatible(moving.type, movingPort, other.type, otherPort)) continue;
 
@@ -231,10 +234,10 @@ export class ConnectionGraph {
 
     let best: SnapCandidate | null = null;
 
-    for (const movingPort of MODULES[moving.type].ports) {
+    for (const movingPort of portsForModule(moving)) {
       if (this.isPortUsed(moving.id, movingPort.id)) continue;
 
-      for (const targetPort of MODULES[target.type].ports) {
+      for (const targetPort of portsForModule(target)) {
         if (this.isPortUsed(target.id, targetPort.id)) continue;
         if (!modulePortsCompatible(moving.type, movingPort, target.type, targetPort)) continue;
 
@@ -327,9 +330,11 @@ export class ConnectionGraph {
 
   serialize() {
     return {
-      version: 1,
+      version: 2,
       modules: [...this.modules.values()],
       connections: [...this.connections.values()],
+      vehicles: [...this.vehicles.values()],
+      activeVehicleId:this.activeVehicleId,
     };
   }
 
@@ -337,9 +342,17 @@ export class ConnectionGraph {
     version?: number;
     modules?: ModuleInstance[];
     connections?: Connection[];
+    vehicles?: VehicleProfile[];
+    activeVehicleId?:string|null;
   }) {
     this.modules.clear();
     this.connections.clear();
+    this.vehicles.clear();
+    for(const v of data.vehicles??[]){
+      if(!v.id||!['car','truck','tractor'].includes(v.kind))continue;
+      this.vehicles.set(v.id,{id:v.id,kind:v.kind,name:String(v.name||'Xe').slice(0,40),color:/^#[0-9a-f]{6}$/i.test(v.color)?v.color:'#3078a0',parked:v.parked===true,cargo:Math.max(0,Math.min(6,Math.round(Number(v.cargo)||0))),mission:v.mission&&['garage','delivery','trailer'].includes(v.mission.kind)?{kind:v.mission.kind,targetRoadId:v.mission.targetRoadId,status:['choose','ready','running','completed'].includes(v.mission.status)?v.mission.status:'choose',delivered:v.mission.delivered}:undefined,experiments:Array.isArray(v.experiments)?v.experiments.filter(e=>['power','balanced','speed'].includes(e.gear)&&[e.cargo,e.speed,e.distance,e.force].every(Number.isFinite)).slice(-6):[]});
+    }
+    this.activeVehicleId=data.activeVehicleId&&this.vehicles.has(data.activeVehicleId)?data.activeVehicleId:this.vehicles.keys().next().value??null;
 
     for (const module of data.modules ?? []) {
       if (!MODULES[module.type]) continue;
@@ -359,6 +372,10 @@ export class ConnectionGraph {
             : undefined,
         slotKey: typeof module.slotKey === 'string' ? module.slotKey : undefined,
         parentId: typeof module.parentId === 'string' ? module.parentId : undefined,
+        vehicleId:typeof module.vehicleId==='string'?module.vehicleId:undefined,
+        vehicleKind:module.vehicleKind&&['car','truck','tractor'].includes(module.vehicleKind)?module.vehicleKind:undefined,
+        color:module.color&&/^#[0-9a-f]{6}$/i.test(module.color)?module.color:undefined,
+        gearMode:module.gearMode&&['power','balanced','speed'].includes(module.gearMode)?module.gearMode:undefined,
       });
     }
 
@@ -367,8 +384,8 @@ export class ConnectionGraph {
       const to = this.modules.get(connection.toModuleId);
       if (!from || !to || from.id === to.id) continue;
 
-      const fromPort = MODULES[from.type].ports.find(port => port.id === connection.fromPortId);
-      const toPort = MODULES[to.type].ports.find(port => port.id === connection.toPortId);
+      const fromPort = portsForModule(from).find(port => port.id === connection.fromPortId);
+      const toPort = portsForModule(to).find(port => port.id === connection.toPortId);
       if (!fromPort || !toPort) continue;
 
       const normalized = normalizeConnection(from, fromPort, to, toPort);

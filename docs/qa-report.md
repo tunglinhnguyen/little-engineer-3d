@@ -1,6 +1,6 @@
 # Module and feature verification
 
-The revised assembly uses 12 physical car parts and 15 module types. Automated checks are in `tests/core.test.ts` and `tests/e2e/car-focus.spec.ts`. Browser scenarios use actual palette clicks and pointer drags for manual assembly; prepared graph fixtures isolate drivetrain, traffic and history scenarios. Fixtures are available only with `?qa=1`.
+The fleet assembly has 20 module types: car (12 parts), truck (16), and tractor with trailer (20). Automated checks are in `tests/core.test.ts`, `tests/fleet.test.ts` and `tests/e2e/*.spec.ts`. Browser scenarios use actual palette clicks, socket taps and pointer drags; prepared graph fixtures isolate drivetrain, traffic and history scenarios. Fixtures are available only with `?qa=1`.
 
 ## Per-module coverage
 
@@ -22,7 +22,7 @@ The revised assembly uses 12 physical car parts and 15 module types. Automated c
 | STOP | Octagonal face and readable STOP | Roadside movement lock; 1.5 second stop, once per passage; loose sign ignored |
 | Speed sign | Round rim and readable 30 | Roadside movement lock; section-relative half speed; loose sign ignored |
 
-Every module has a separate browser test for palette selection, recognisable name, a visible pickable point and absence of automatic attachment, plus a screenshot. Rendered screenshots are visually inspected in addition to geometry assertions.
+The original modules and wide curve have separate browser tests for palette selection, recognisable name, a visible pickable point and absence of automatic attachment. Idler axles, cargo beds, hitches and trailers are exercised through complete touch assembly of the truck and tractor, with core assertions for type-specific mounts and wheel counts. Rendered screenshots are visually inspected in addition to geometry assertions.
 
 ## Cross-feature coverage
 
@@ -41,6 +41,17 @@ Every module has a separate browser test for palette selection, recognisable nam
 
 ## Validation environment and limits
 
-Local validation: TypeScript check, **93 core tests**, production build and **36 Playwright browser tests**. GitHub Actions repeats the checks before Pages deployment. Module screenshots, feature screenshots and the HTML browser report are retained in the `car-focus-screenshots` workflow artifact for 30 days.
+The validation suite contains **115 core tests** and **43 Playwright browser scenarios**, plus TypeScript and production build. GitHub Actions repeats all checks before Pages deployment. Module screenshots, feature screenshots and the HTML browser report are retained in the `car-focus-screenshots` workflow artifact for 30 days.
 
-The browser tests use Chromium/WebGL with tablet-sized viewports and native synthetic touch events. They do not establish compatibility on physical iPad/Safari. The driving model is a deterministic educational mechanism simulation; it does not model rigid-body collision, suspension loads, tyre grip or right-of-way among multiple vehicles. The 30 sign applies a relative speed reduction, not real-world km/h units.
+### Six-feature regression coverage
+
+- Three complete vehicles assembled entirely using palette and socket taps, including all 18 independent wheels; creating a fourth vehicle; save/reload and independent circuits.
+- World socket touch only commits on release; small jitter is accepted; moving beyond the threshold cancels the tap; undo/redo retains ownership.
+- Selecting a hidden differential, explicit detach, undo without changing the active vehicle, rename/color, parking/hiding and reopening; per-vehicle palette limits.
+- All three vehicles moving simultaneously; turning off one switch leaves the other drives moving; Stop all freezes every module; reload preserves joints.
+- Actual 12/48, 12/24 and 12/12 teeth; RPM/torque consistency; loaded vs empty acceleration; overload and recovery in a lower gear; 10-second measurements agree with fleet travel.
+- Following a stationary vehicle and crossing an intersection without body overlap; both crossing vehicles eventually pass.
+- Mission destinations must be ahead and reachable; explicit side-branch routing; delivery needs attached cargo carrier, unloads once, and stays completed after reload.
+- Trailer mission requires its axles and every wheel; articulated wide-curve travel preserves the hitch pin, independent trailer heading, ground height, road coverage and restored attachments.
+
+The browser tests use Chromium/WebGL with tablet-sized viewports and native synthetic touch events. They do not establish compatibility on physical iPad/Safari. The driving model is deterministic and educational: footprint avoidance and intersection reservations, not dynamic crashes, tyre grip or suspension. Opposing vehicles on a narrow road stop rather than automatically reversing or finding a detour. The 30 sign applies a relative speed reduction, not real-world km/h. Long vehicles use wide curves and only straight movements through small intersections.

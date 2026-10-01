@@ -9,8 +9,8 @@ const lerp=(a:Vector3Tuple,b:Vector3Tuple,t:number):Vector3Tuple=>[a[0]+(b[0]-a[
 export function worldRoadPort(m:ModuleInstance,id:string):Vector3Tuple|null{
  const p=MODULES[m.type].ports.find(p=>p.id===id);return p?add(m.position,rotateY(p.position,m.rotationY)):null;
 }
-export function curvePoint(t:number):Vector3Tuple{
- const angle=t*Math.PI/2,R=CURVE_RADIUS;return [R-R*Math.cos(angle),ROAD_HEIGHT,-R+R*Math.sin(angle)];
+export function curvePoint(t:number,radius=CURVE_RADIUS):Vector3Tuple{
+ const angle=t*Math.PI/2,R=radius;return [R-R*Math.cos(angle),ROAD_HEIGHT,-R+R*Math.sin(angle)];
 }
 export function roadCenterline(m:ModuleInstance):Vector3Tuple[]{
  const ports=MODULES[m.type].ports;
@@ -20,8 +20,8 @@ export function roadCenterline(m:ModuleInstance):Vector3Tuple[]{
 export function sampleRoad(m:ModuleInstance,entry:string,exit:string):Vector3Tuple[]{
  const a=MODULES[m.type].ports.find(p=>p.id===entry)!.position,b=MODULES[m.type].ports.find(p=>p.id===exit)!.position;
  const points:Vector3Tuple[]=[];
- if(m.type==='road-curve'){
-  for(let i=0;i<=64;i++)points.push(curvePoint(entry==='south'?i/64:1-i/64));
+ if(m.type==='road-curve'||m.type==='road-wide-curve'){
+  for(let i=0;i<=64;i++)points.push(curvePoint(entry==='south'?i/64:1-i/64,m.type==='road-wide-curve'?8:CURVE_RADIUS));
  }else if(m.type==='road-intersection'&&Math.abs(a[0]*b[0]+a[2]*b[2])<.01){
   // Quarter circle tangent to the connected approaches, not a corner through the centre.
   const R=Math.hypot(...[a[0],a[2]]),center:Vector3Tuple=[a[0]+b[0],ROAD_HEIGHT,a[2]+b[2]];
@@ -78,7 +78,16 @@ function chooseExit(g:ConnectionGraph,m:ModuleInstance,entry:string){
   return ep.axis[0]*a.axis[0]+ep.axis[2]*a.axis[2]-(ep.axis[0]*b.axis[0]+ep.axis[2]*b.axis[2]);
  });return candidates[0]?.id??entry;
 }
-export function buildRoute(g:ConnectionGraph,vehicleId:string):VehicleRoute{
+function pathTo(g:ConnectionGraph,start:ModuleInstance,entry:string,target:string){
+ const queue:Array<{m:ModuleInstance;entry:string;path:Array<{roadId:string;entry:string;exit:string}>}>=[{m:start,entry,path:[]}],seen=new Set<string>();
+ for(let i=0;i<queue.length;i++){
+  const node=queue[i],key=node.m.id+':'+node.entry;if(seen.has(key))continue;seen.add(key);
+  if(node.m.id===target)return [...node.path,{roadId:node.m.id,entry:node.entry,exit:chooseExit(g,node.m,node.entry)}];
+  const preferred=chooseExit(g,node.m,node.entry),exits=MODULES[node.m.type].ports.filter(p=>p.id!==node.entry).sort((a,b)=>Number(b.id===preferred)-Number(a.id===preferred));
+  for(const exit of exits){const edge=edgeAt(g,node.m.id,exit.id);if(edge)queue.push({m:g.modules.get(edge.otherId)!,entry:edge.otherPort,path:[...node.path,{roadId:node.m.id,entry:node.entry,exit:exit.id}]});}
+ }return null;
+}
+export function buildRoute(g:ConnectionGraph,vehicleId:string,options:{destinationRoadId?:string}={}):VehicleRoute{
  const empty:VehicleRoute={points:[],length:0,closed:false,ranges:[]};
  const car=g.modules.get(vehicleId),start=car?.parentId?g.modules.get(car.parentId):undefined;
  if(!car||car.type!=='car-base'||car.slotKey!=='road'||!start||!ROAD_TYPES.has(start.type))return empty;
@@ -93,6 +102,8 @@ export function buildRoute(g:ConnectionGraph,vehicleId:string):VehicleRoute{
   const ax=rotateY(a.axis,start.rotationY),bx=rotateY(b.axis,start.rotationY);
   return ax[0]*forward[0]+ax[2]*forward[2]-(bx[0]*forward[0]+bx[2]*forward[2]);
  })[0].id;
+ let planned:Array<{roadId:string;entry:string;exit:string}>|null=null;
+ if(options.destinationRoadId&&options.destinationRoadId!==start.id){const edge=edgeAt(g,start.id,exit);if(!edge)return empty;const tail=pathTo(g,g.modules.get(edge.otherId)!,edge.otherPort,options.destinationRoadId);if(!tail)return empty;planned=[{roadId:start.id,entry,exit},...tail];}
  let m=start,en=entry,ex=exit;const points:Vector3Tuple[]=[],ranges:RouteRange[]=[],seen=new Set<string>();let total=0,closed=false;
  for(let n=0;n<100;n++){
   const key=m.id+':'+en+':'+ex;
@@ -102,8 +113,9 @@ export function buildRoute(g:ConnectionGraph,vehicleId:string):VehicleRoute{
   if(points.length&&distanceXZ(points.at(-1)!,segment[0])>.03)break;
   ranges.push({roadId:m.id,start:total,end:total+length,entry:en,exit:ex});total+=length;
   points.push(...(points.length?segment.slice(1):segment));
+  if(options.destinationRoadId===m.id)break;
   const edge=edgeAt(g,m.id,ex);if(!edge)break;
-  m=g.modules.get(edge.otherId)!;en=edge.otherPort;ex=chooseExit(g,m,en);
+  m=g.modules.get(edge.otherId)!;en=edge.otherPort;ex=planned?.[n+1]?.exit??chooseExit(g,m,en);
  }
  return {points,length:total,closed,ranges};
 }

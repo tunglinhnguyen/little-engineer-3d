@@ -6,6 +6,10 @@
 |---|---|
 | `layout.ts`, `moduleRegistry.ts` | Native dimensions, axes, bearings, mounting slots, typed connectors and mechanism ratios |
 | `ConnectionGraph` | Module instances, occupied ports, connection validation, serialization |
+| `vehicles.ts` | Independent ownership, variant mounting slots, per-vehicle inventory limits and profiles |
+| `experiments.ts` | Shared gear/load/acceleration model and deterministic 10-second measurements |
+| `missions.ts` | Destination validation, assembly missions and one-time delivery completion |
+| `FleetSimulation` | Independent drives, swept footprint checks, intersection reservations, graph pose updates |
 | `assembly.ts` | Parent ownership, exact mounting poses, valid nearby previews, group movement and physical connection reconciliation |
 | `SimulationEngine` | Closed supply/return circuit, switch state, RPM, torque loss and rear axle torque split |
 | `worldRoutes.ts` | Shared road centreline geometry, physically connected seams and directed routes |
@@ -23,9 +27,11 @@ Palette selection never installs a part. Preview has no side effects. Commit rec
 
 Build, test and run are separate modes. Test animates powered mechanisms without translating the car. Run places the rear axle reference on a continuous directed road route; chassis and mounted children share the resulting pose. Wheel angle follows travelled distance, and front steering follows curvature. There is no automatic reversal at an open road end.
 
-Controls are associated with their mounted road section. Red holds before the signal; STOP holds for 1.5 seconds once per passage; the speed sign applies a relative half-speed educational rule in that section. Loose signs have no effect. This is not a simulation of legal speed units or traffic priorities at an intersection. Intersections prefer a connected straight exit, otherwise a connected turn.
+Controls are associated with their mounted road section. Red holds before the signal; STOP holds for 1.5 seconds once per passage; the speed sign applies a relative half-speed educational rule in that section. Loose signs have no effect. Intersections prefer a connected straight exit unless a mission chooses another reachable exit. Intersection reservations and padded oriented bounding boxes prevent crossing/following vehicles from intersecting; they are educational coordination, not a full traffic-law model.
 
-Stopping commits the currently rendered car and its children back into graph state. Return to start is an explicit action. A switch change during run updates the circuit without rebuilding the route or resetting distance.
+Fleet stepping updates graph poses and then the renderer mirrors them. A trailer retains a distinct heading while its pin coincides with the hitch; all trailer descendants move together. Stopping saves current poses. Return to start is explicit and moves the current assembly without reattaching parts detached after driving. A switch change during run updates the circuit without rebuilding the route or resetting distance.
+
+Version 2 persistence stores vehicle profiles, active identity, gear choices, cargo, missions and at most six experiment records per vehicle. Legacy single-car saves migrate to a profile. Ownership filters isolate all physical/electrical reconciliation; a part cannot be committed to another vehicle's socket. Parked vehicles remain saved but are hidden and excluded from driving/collisions.
 
 ## Interaction and rendering
 
